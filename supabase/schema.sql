@@ -1,0 +1,2 @@
+-- Phase 1 placeholder.
+-- Supabase schema implementation starts in Phase 4.

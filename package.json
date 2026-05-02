@@ -1,0 +1,13 @@
+{
+  "name": "surveychain-rewards",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.11.1",
+  "scripts": {
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm -r --if-present test",
+    "coverage": "pnpm -r --if-present coverage"
+  }
+}
