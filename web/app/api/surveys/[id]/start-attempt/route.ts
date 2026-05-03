@@ -13,20 +13,20 @@ function hashIp(ip: string | null): string | null {
 
 export async function POST(
   request: Request,
-  context: { params: Promise<{ surveyId: string }> }
+  context: { params: Promise<{ id: string }> }
 ) {
   const session = await requireSession();
   if ("response" in session) {
     return session.response;
   }
 
-  const { surveyId } = await context.params;
-  if (!surveyId || !/^\d+$/.test(surveyId)) {
-    return NextResponse.json({ error: "Invalid surveyId." }, { status: 400 });
+  const { id } = await context.params;
+  if (!id || !/^\d+$/.test(id)) {
+    return NextResponse.json({ error: "Invalid survey ID." }, { status: 400 });
   }
 
   const attempt = await createAttempt({
-    surveyId: BigInt(surveyId),
+    surveyId: BigInt(id),
     respondentWallet: session.walletAddress,
     userAgent: request.headers.get("user-agent"),
     ipHash: hashIp(request.headers.get("x-forwarded-for"))
@@ -40,4 +40,3 @@ export async function POST(
     startedAt: attempt.startedAt.toISOString()
   });
 }
-

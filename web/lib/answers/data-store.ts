@@ -477,6 +477,116 @@ export async function getMyAnswers(
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
+export async function getAllAnswers(): Promise<SurveyAnswerRecord[]> {
+  if (hasSupabaseRestConfig()) {
+    const rows = await supabaseSelect<{
+      id: string;
+      attempt_id: string;
+      survey_id: string;
+      respondent_wallet: string;
+      answer_json: unknown;
+      normalized_answer_json: unknown;
+      answer_hash: string;
+      salt: string;
+      status: SurveyAnswerRecord["status"];
+      validation_score: number;
+      validation_status: "passed" | "failed";
+      validation_reason: string | null;
+      validation_details: Record<string, unknown> | null;
+      started_at: string;
+      submitted_at: string;
+      completion_time_seconds: number;
+      reward_amount_wei: string | null;
+      completion_nonce: string;
+      completion_deadline: string | null;
+      completion_signature: string | null;
+      onchain_tx_hash: string | null;
+      onchain_confirmed_at: string | null;
+      flagged: boolean;
+      audit_notes: string | null;
+      created_at: string;
+    }>(
+      `survey_answers?select=*&order=created_at.desc`
+    );
+
+    if (!rows) return [];
+
+    return rows.map((row) => ({
+      id: row.id,
+      attemptId: row.attempt_id,
+      surveyId: BigInt(row.survey_id),
+      respondentWallet: row.respondent_wallet,
+      answerJson: row.answer_json,
+      normalizedAnswerJson: row.normalized_answer_json,
+      answerHash: row.answer_hash,
+      salt: row.salt,
+      status: row.status,
+      validationScore: row.validation_score,
+      validationStatus: row.validation_status,
+      validationReason: row.validation_reason,
+      validationDetails: row.validation_details ?? {},
+      startedAt: new Date(row.started_at),
+      submittedAt: new Date(row.submitted_at),
+      completionTimeSeconds: row.completion_time_seconds,
+      rewardAmountWei: row.reward_amount_wei ?? "0",
+      completionNonce: row.completion_nonce,
+      completionDeadline: row.completion_deadline
+        ? new Date(row.completion_deadline)
+        : null,
+      completionSignature: row.completion_signature,
+      onchainTxHash: row.onchain_tx_hash,
+      onchainConfirmedAt: row.onchain_confirmed_at
+        ? new Date(row.onchain_confirmed_at)
+        : null,
+      flagged: row.flagged,
+      auditNotes: row.audit_notes,
+      createdAt: new Date(row.created_at)
+    }));
+  }
+
+  return [...answers.values()].sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+  );
+}
+
+export async function updateAnswerFlag(
+  id: string,
+  flagged: boolean
+): Promise<boolean> {
+  if (hasSupabaseRestConfig()) {
+    return supabasePatch(`survey_answers?id=eq.${encodeURIComponent(id)}`, {
+      flagged
+    });
+  }
+
+  const record = answers.get(id);
+  if (record) {
+    record.flagged = flagged;
+    answers.set(id, record);
+    return true;
+  }
+  return false;
+}
+
+export async function updateAnswerAuditNote(
+  id: string,
+  note: string | null
+): Promise<boolean> {
+  if (hasSupabaseRestConfig()) {
+    return supabasePatch(`survey_answers?id=eq.${encodeURIComponent(id)}`, {
+      audit_notes: note
+    });
+  }
+
+  const record = answers.get(id);
+  if (record) {
+    record.auditNotes = note;
+    answers.set(id, record);
+    return true;
+  }
+  return false;
+}
+
 export function resetAnswerStoresForTests(): void {
   attempts.clear();
   answers.clear();

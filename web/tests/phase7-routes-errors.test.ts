@@ -3,7 +3,7 @@ import { Wallet } from "ethers";
 import { AUTH_COOKIE_NAME } from "@/lib/auth/config";
 import { createSessionToken } from "@/lib/auth/session";
 import { resetAnswerStoresForTests } from "@/lib/answers/data-store";
-import { POST as startAttemptPost } from "@/app/api/surveys/[surveyId]/start-attempt/route";
+import { POST as startAttemptPost } from "@/app/api/surveys/[id]/start-attempt/route";
 import { POST as submitPost } from "@/app/api/answers/submit/route";
 import { POST as refreshProofPost } from "@/app/api/answers/[id]/refresh-proof/route";
 import { POST as markOnchainPost } from "@/app/api/answers/[id]/mark-onchain-confirmed/route";
@@ -29,7 +29,7 @@ describe("Phase 7 route error coverage", () => {
     login(wallet);
     const response = await startAttemptPost(
       new Request("http://localhost/api/surveys/x/start-attempt", { method: "POST" }),
-      { params: Promise.resolve({ surveyId: "x" }) }
+      { params: Promise.resolve({ id: "x" }) }
     );
     expect(response.status).toBe(400);
   });

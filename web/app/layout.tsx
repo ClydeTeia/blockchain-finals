@@ -1,8 +1,14 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+
+import AppWrapper from "@/components/AppWrapper";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "SurveyChain Rewards",
-  description: "Phase 1 foundation scaffold"
+  description: "Blockchain-based survey rewards platform"
 };
 
 export default function RootLayout({
@@ -10,7 +16,9 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className={inter.className}>
+        <AppWrapper>{children}</AppWrapper>
+      </body>
     </html>
   );
 }

@@ -3,7 +3,7 @@ import { Wallet } from "ethers";
 import { AUTH_COOKIE_NAME } from "@/lib/auth/config";
 import { createSessionToken } from "@/lib/auth/session";
 import { resetAnswerStoresForTests } from "@/lib/answers/data-store";
-import { POST as startAttemptPost } from "@/app/api/surveys/[surveyId]/start-attempt/route";
+import { POST as startAttemptPost } from "@/app/api/surveys/[id]/start-attempt/route";
 import { POST as submitPost } from "@/app/api/answers/submit/route";
 import { POST as refreshProofPost } from "@/app/api/answers/[id]/refresh-proof/route";
 import { POST as markOnchainPost } from "@/app/api/answers/[id]/mark-onchain-confirmed/route";
@@ -35,7 +35,7 @@ describe("Phase 7 route handlers", () => {
 
     const startAttemptResponse = await startAttemptPost(
       new Request("http://localhost/api/surveys/1/start-attempt", { method: "POST" }),
-      { params: Promise.resolve({ surveyId: "1" }) }
+      { params: Promise.resolve({ id: "1" }) }
     );
     expect(startAttemptResponse.status).toBe(200);
     const startAttemptBody = (await startAttemptResponse.json()) as { attemptId: string };
@@ -97,7 +97,7 @@ describe("Phase 7 route handlers", () => {
 
     const startAttemptResponse = await startAttemptPost(
       new Request("http://localhost/api/surveys/1/start-attempt", { method: "POST" }),
-      { params: Promise.resolve({ surveyId: "1" }) }
+      { params: Promise.resolve({ id: "1" }) }
     );
     const startAttemptBody = (await startAttemptResponse.json()) as { attemptId: string };
 
@@ -130,7 +130,7 @@ describe("Phase 7 route handlers", () => {
 
     const attempt1 = await startAttemptPost(
       new Request("http://localhost/api/surveys/1/start-attempt", { method: "POST" }),
-      { params: Promise.resolve({ surveyId: "1" }) }
+      { params: Promise.resolve({ id: "1" }) }
     );
     const body1 = (await attempt1.json()) as { attemptId: string };
     await submitPost(
@@ -148,7 +148,7 @@ describe("Phase 7 route handlers", () => {
 
     const attempt2 = await startAttemptPost(
       new Request("http://localhost/api/surveys/1/start-attempt", { method: "POST" }),
-      { params: Promise.resolve({ surveyId: "1" }) }
+      { params: Promise.resolve({ id: "1" }) }
     );
     const body2 = (await attempt2.json()) as { attemptId: string };
     const duplicate = await submitPost(
@@ -174,7 +174,7 @@ describe("Phase 7 route handlers", () => {
 
     const startAttemptResponse = await startAttemptPost(
       new Request("http://localhost/api/surveys/1/start-attempt", { method: "POST" }),
-      { params: Promise.resolve({ surveyId: "1" }) }
+      { params: Promise.resolve({ id: "1" }) }
     );
     const startAttemptBody = (await startAttemptResponse.json()) as { attemptId: string };
 

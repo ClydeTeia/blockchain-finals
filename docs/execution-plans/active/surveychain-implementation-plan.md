@@ -1609,11 +1609,8 @@ Deploy the contract and Next.js web app, then update documentation for final sub
 - Contract address recording.
 - Etherscan link.
 - Next.js web app deployment.
-- Supabase setup notes.
-- README completion.
-- Screenshots.
-- Group contribution section.
-- Final demo flow.
+- Yh
+
 
 ### Out of Scope
 
