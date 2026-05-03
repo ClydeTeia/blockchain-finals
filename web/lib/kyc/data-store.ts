@@ -28,6 +28,20 @@ export type KycRequestRecord = {
 
 const kycRequests = new Map<string, KycRequestRecord>();
 
+function isExplicitTestMode(): boolean {
+  return process.env.NODE_ENV === "test" || process.env.SUPABASE_TEST_MODE === "1";
+}
+
+function allowMemoryFallback(): boolean {
+  return !hasSupabaseRestConfig() && isExplicitTestMode();
+}
+
+function makePersistenceError(message: string, code: string): Error & { code: string } {
+  const error = new Error(message) as Error & { code: string };
+  error.code = code;
+  return error;
+}
+
 function normalizeRow(row: {
   id: string;
   wallet_address: string;
@@ -105,10 +119,28 @@ export async function createKycRequest(input: {
     });
 
     if (!inserted) {
-      kycRequests.set(record.id, record);
+      const [existingDocument, existingSelfie] = await Promise.all([
+        supabaseSelect<{ id: string }>(
+          `kyc_requests?select=id&document_hash=eq.${encodeURIComponent(record.documentHash)}&limit=1`
+        ),
+        supabaseSelect<{ id: string }>(
+          `kyc_requests?select=id&selfie_hash=eq.${encodeURIComponent(record.selfieHash)}&limit=1`
+        )
+      ]);
+
+      if ((existingDocument?.length ?? 0) > 0 || (existingSelfie?.length ?? 0) > 0) {
+        throw makePersistenceError("Duplicate KYC image hash.", "DUPLICATE_KYC_HASH");
+      }
+
+      throw makePersistenceError("Failed to persist KYC request.", "KYC_PERSIST_FAILED");
     }
-  } else {
+  } else if (allowMemoryFallback()) {
     kycRequests.set(record.id, record);
+  } else {
+    throw makePersistenceError(
+      "Supabase REST is not configured for KYC persistence.",
+      "SUPABASE_CONFIG_MISSING"
+    );
   }
 
   return record;
@@ -143,6 +175,13 @@ export async function getLatestKycRequestByWallet(
     return row ? normalizeRow(row) : null;
   }
 
+  if (!allowMemoryFallback()) {
+    throw makePersistenceError(
+      "Supabase REST is not configured for KYC reads.",
+      "SUPABASE_CONFIG_MISSING"
+    );
+  }
+
   const records = [...kycRequests.values()]
     .filter(
       (item) => item.walletAddress.toLowerCase() === walletAddress.toLowerCase()
@@ -175,6 +214,13 @@ export async function getKycRequestById(id: string): Promise<KycRequestRecord | 
     return row ? normalizeRow(row) : null;
   }
 
+  if (!allowMemoryFallback()) {
+    throw makePersistenceError(
+      "Supabase REST is not configured for KYC reads.",
+      "SUPABASE_CONFIG_MISSING"
+    );
+  }
+
   return kycRequests.get(id) ?? null;
 }
 
@@ -201,6 +247,13 @@ export async function listKycRequests(status?: KycStatus): Promise<KycRequestRec
     return (rows ?? []).map(normalizeRow);
   }
 
+  if (!allowMemoryFallback()) {
+    throw makePersistenceError(
+      "Supabase REST is not configured for KYC reads.",
+      "SUPABASE_CONFIG_MISSING"
+    );
+  }
+
   return [...kycRequests.values()]
     .filter((item) => (status ? item.status === status : true))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -220,9 +273,16 @@ export async function decideKycRequest(input: {
       reviewed_at: new Date().toISOString()
     });
     if (!ok) {
-      return null;
+      throw makePersistenceError("Failed to persist KYC decision.", "KYC_PERSIST_FAILED");
     }
     return getKycRequestById(input.id);
+  }
+
+  if (!allowMemoryFallback()) {
+    throw makePersistenceError(
+      "Supabase REST is not configured for KYC decisions.",
+      "SUPABASE_CONFIG_MISSING"
+    );
   }
 
   const existing = kycRequests.get(input.id);

@@ -13,6 +13,8 @@ import { POST as rejectPost } from "@/app/api/admin/kyc/[id]/reject/route";
 import { clearMockCookies, setMockCookie } from "@/test-utils/mock-next-headers";
 
 describe("Phase 6 KYC route handlers", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
     clearMockCookies();
     resetKycStoreForTests();
@@ -24,6 +26,12 @@ describe("Phase 6 KYC route handlers", () => {
     process.env.VERIFIER_WALLET_ALLOWLIST = "";
     delete process.env.SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    Reflect.set(process.env, "NODE_ENV", "test");
+    vi.unstubAllGlobals();
+  });
+
+  afterAll(() => {
+    Reflect.set(process.env, "NODE_ENV", originalNodeEnv);
   });
 
   function login(walletAddress: string): void {
@@ -147,6 +155,82 @@ describe("Phase 6 KYC route handlers", () => {
     expect(statusApprovedBody.decisionReason).toBe("Looks good");
   });
 
+  it("rejects KYC submit when storage config is missing outside test mode", async () => {
+    Reflect.set(process.env, "NODE_ENV", "production");
+    const wallet = Wallet.createRandom();
+    login(wallet.address);
+
+    const response = await kycSubmitPost(
+      new Request("http://localhost/api/kyc/submit", {
+        method: "POST",
+        body: makeKycFormData()
+      })
+    );
+    expect(response.status).toBe(500);
+  });
+
+  it("returns 409 for duplicate KYC document/selfie hashes", async () => {
+    const wallet = Wallet.createRandom();
+    login(wallet.address);
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 409 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "dup" }]), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await kycSubmitPost(
+      new Request("http://localhost/api/kyc/submit", {
+        method: "POST",
+        body: makeKycFormData()
+      })
+    );
+    expect(response.status).toBe(409);
+  });
+
+  it("rejects non-admin access for signed URLs, approve, and reject routes", async () => {
+    const respondent = Wallet.createRandom();
+    login(respondent.address);
+    const submitResponse = await kycSubmitPost(
+      new Request("http://localhost/api/kyc/submit", {
+        method: "POST",
+        body: makeKycFormData()
+      })
+    );
+    const submitBody = (await submitResponse.json()) as { requestId: string };
+
+    const signedUrlsResponse = await signedUrlsPost(
+      new Request(`http://localhost/api/admin/kyc/${submitBody.requestId}/signed-urls`, {
+        method: "POST",
+        body: JSON.stringify({ expiresInSeconds: 120 })
+      }),
+      { params: Promise.resolve({ id: submitBody.requestId }) }
+    );
+    expect(signedUrlsResponse.status).toBe(403);
+
+    const approveResponse = await approvePost(
+      new Request(`http://localhost/api/admin/kyc/${submitBody.requestId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Looks good" })
+      }),
+      { params: Promise.resolve({ id: submitBody.requestId }) }
+    );
+    expect(approveResponse.status).toBe(403);
+
+    const rejectResponse = await rejectPost(
+      new Request(`http://localhost/api/admin/kyc/${submitBody.requestId}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Nope" })
+      }),
+      { params: Promise.resolve({ id: submitBody.requestId }) }
+    );
+    expect(rejectResponse.status).toBe(403);
+  });
+
   it("allows admin to reject pending request", async () => {
     const respondent = Wallet.createRandom();
     const admin = Wallet.createRandom();
@@ -180,5 +264,72 @@ describe("Phase 6 KYC route handlers", () => {
     };
     expect(statusBody.status).toBe("rejected");
     expect(statusBody.decisionReason).toBe("Image quality too low");
+  });
+
+  it("allows decisions only while status is pending", async () => {
+    const respondent = Wallet.createRandom();
+    const admin = Wallet.createRandom();
+    process.env.ADMIN_WALLET_ALLOWLIST = admin.address;
+
+    login(respondent.address);
+    const submitResponse = await kycSubmitPost(
+      new Request("http://localhost/api/kyc/submit", {
+        method: "POST",
+        body: makeKycFormData()
+      })
+    );
+    const submitBody = (await submitResponse.json()) as { requestId: string };
+
+    login(admin.address);
+    const approveResponse = await approvePost(
+      new Request(`http://localhost/api/admin/kyc/${submitBody.requestId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Approved" })
+      }),
+      { params: Promise.resolve({ id: submitBody.requestId }) }
+    );
+    expect(approveResponse.status).toBe(200);
+
+    const secondApprove = await approvePost(
+      new Request(`http://localhost/api/admin/kyc/${submitBody.requestId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Again" })
+      }),
+      { params: Promise.resolve({ id: submitBody.requestId }) }
+    );
+    expect(secondApprove.status).toBe(400);
+
+    const rejectAfterApprove = await rejectPost(
+      new Request(`http://localhost/api/admin/kyc/${submitBody.requestId}/reject`, {
+        method: "POST",
+        body: JSON.stringify({ reason: "Too late" })
+      }),
+      { params: Promise.resolve({ id: submitBody.requestId }) }
+    );
+    expect(rejectAfterApprove.status).toBe(400);
+  });
+
+  it("fails request when audit log cannot be durably persisted outside test mode", async () => {
+    Reflect.set(process.env, "NODE_ENV", "production");
+    process.env.SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+
+    const wallet = Wallet.createRandom();
+    login(wallet.address);
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(new Response(null, { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await kycSubmitPost(
+      new Request("http://localhost/api/kyc/submit", {
+        method: "POST",
+        body: makeKycFormData()
+      })
+    );
+    expect(response.status).toBe(500);
   });
 });

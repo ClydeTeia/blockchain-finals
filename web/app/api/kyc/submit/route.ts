@@ -92,20 +92,31 @@ export async function POST(request: Request) {
       selfieHash,
       proofHash
     });
-  } catch {
+  } catch (error) {
+    const typedError = error as { code?: string } | undefined;
+    if (typedError?.code === "DUPLICATE_KYC_HASH") {
+      return NextResponse.json(
+        { error: "A matching document or selfie image already exists." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: "Unable to create KYC request." }, { status: 500 });
   }
 
-  await logAuditEvent({
-    actorWallet: session.walletAddress,
-    action: "kyc_submit",
-    entityType: "kyc_request",
-    entityId: created.id,
-    details: {
-      status: created.status,
-      proofHash: created.proofHash
-    }
-  });
+  try {
+    await logAuditEvent({
+      actorWallet: session.walletAddress,
+      action: "kyc_submit",
+      entityType: "kyc_request",
+      entityId: created.id,
+      details: {
+        status: created.status,
+        proofHash: created.proofHash
+      }
+    });
+  } catch {
+    return NextResponse.json({ error: "Unable to record audit log." }, { status: 500 });
+  }
 
   return NextResponse.json({
     requestId: created.id,

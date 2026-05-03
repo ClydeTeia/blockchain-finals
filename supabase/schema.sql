@@ -103,6 +103,32 @@ create table if not exists survey_answers (
 
 comment on table survey_answers is 'Append-only survey answer records. Do not update original answer content.';
 
+create or replace function prevent_survey_answers_original_mutation()
+returns trigger
+language plpgsql
+as $$
+begin
+	if new.answer_json is distinct from old.answer_json
+		or new.normalized_answer_json is distinct from old.normalized_answer_json
+		or new.salt is distinct from old.salt
+		or new.answer_hash is distinct from old.answer_hash
+		or new.submitted_at is distinct from old.submitted_at
+		or new.attempt_id is distinct from old.attempt_id
+		or new.survey_id is distinct from old.survey_id
+		or new.respondent_wallet is distinct from old.respondent_wallet then
+		raise exception 'survey_answers original submission fields are append-only';
+	end if;
+
+	return new;
+end;
+$$;
+
+drop trigger if exists trg_prevent_survey_answers_original_mutation on survey_answers;
+create trigger trg_prevent_survey_answers_original_mutation
+before update on survey_answers
+for each row
+execute function prevent_survey_answers_original_mutation();
+
 create unique index if not exists survey_answers_attempt_unique on survey_answers (attempt_id);
 create index if not exists survey_answers_survey_idx on survey_answers (survey_id);
 create index if not exists survey_answers_wallet_idx on survey_answers (respondent_wallet);

@@ -10,6 +10,10 @@ type AuditInput = {
 
 const memoryAuditLogs: AuditInput[] = [];
 
+function isExplicitTestMode(): boolean {
+  return process.env.NODE_ENV === "test" || process.env.SUPABASE_TEST_MODE === "1";
+}
+
 export async function logAuditEvent(input: AuditInput): Promise<void> {
   const inserted = await supabaseInsert("audit_logs", {
     actor_wallet: input.actorWallet,
@@ -20,7 +24,12 @@ export async function logAuditEvent(input: AuditInput): Promise<void> {
   });
 
   if (!inserted) {
-    memoryAuditLogs.push(input);
+    if (isExplicitTestMode()) {
+      memoryAuditLogs.push(input);
+      return;
+    }
+
+    throw new Error("Audit log persistence failed.");
   }
 }
 

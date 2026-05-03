@@ -3,6 +3,10 @@ type SupabaseStorageConfig = {
   serviceRoleKey: string;
 };
 
+function isExplicitTestMode(): boolean {
+  return process.env.NODE_ENV === "test" || process.env.SUPABASE_TEST_MODE === "1";
+}
+
 function getStorageConfig(): SupabaseStorageConfig | null {
   const url = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -27,7 +31,7 @@ export async function uploadPrivateObject(input: {
 }): Promise<boolean> {
   const config = getStorageConfig();
   if (!config) {
-    return true;
+    return isExplicitTestMode();
   }
 
   const response = await fetch(
@@ -54,6 +58,9 @@ export async function createSignedObjectUrl(input: {
 }): Promise<string | null> {
   const config = getStorageConfig();
   if (!config) {
+    if (!isExplicitTestMode()) {
+      return null;
+    }
     const safePath = encodeURIComponent(input.objectPath);
     return `https://example.local/storage/${input.bucket}/${safePath}?exp=${input.expiresInSeconds}`;
   }
