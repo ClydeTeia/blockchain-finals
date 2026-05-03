@@ -1,8 +1,10 @@
+import { NetworkGuard } from "@/components/NetworkGuard";
+
 export default function HomePage() {
   return (
-    <main>
+    <NetworkGuard>
       <h1>SurveyChain Rewards</h1>
-      <p>Phase 1 project foundation is ready.</p>
-    </main>
+      <p>Connect your MetaMask wallet and sign in to get started.</p>
+    </NetworkGuard>
   );
 }
