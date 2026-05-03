@@ -11,6 +11,7 @@
 - `docs/testing.md`
 - `docs/api-contracts.md`
 - `docs/smart-contract.md`
+- `docs/supabase-schema.md`
 - `docs/execution-plans/active/surveychain-implementation-plan.md`
 
 ## Execution Plans
