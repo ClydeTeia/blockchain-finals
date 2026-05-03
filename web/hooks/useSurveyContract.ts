@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { BrowserProvider, Contract, ContractTransactionResponse } from "ethers";
 import {
   SURVEY_REWARD_ABI,
@@ -29,6 +29,15 @@ export type SurveyContractState = {
     signature: string
   ) => Promise<ContractTransactionResponse>;
   requestVerification: (kycProofHash: string) => Promise<ContractTransactionResponse>;
+  createSurvey: (
+    title: string,
+    description: string,
+    question: string,
+    options: string[],
+    rewardPerResponse: bigint,
+    maxResponses: bigint,
+    value: bigint
+  ) => Promise<ContractTransactionResponse>;
 };
 
 export function useSurveyContract(
@@ -143,6 +152,24 @@ export function useSurveyContract(
     [writeContract]
   );
 
+  const createSurvey = useCallback(
+    async (
+      title: string,
+      description: string,
+      question: string,
+      options: string[],
+      rewardPerResponse: bigint,
+      maxResponses: bigint,
+      value: bigint
+    ): Promise<ContractTransactionResponse> => {
+      const c = await writeContract();
+      return c.createSurvey(title, description, question, options, rewardPerResponse, maxResponses, {
+        value,
+      }) as Promise<ContractTransactionResponse>;
+    },
+    [writeContract]
+  );
+
   return {
     isReady: !!readContract,
     contractAddress,
@@ -154,5 +181,6 @@ export function useSurveyContract(
     claimRewards,
     submitResponseWithProof,
     requestVerification,
+    createSurvey,
   };
 }
