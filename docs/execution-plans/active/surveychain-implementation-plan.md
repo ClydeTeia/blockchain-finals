@@ -2182,3 +2182,55 @@ pnpm test
   - `docs/smart-contract.md`
   - `docs/architecture.md`
   - `README.md`
+
+## 19. Phase 8 Results
+
+- Web wallet/auth/contract foundation implemented:
+  - `web/types/ethereum.d.ts` — Window.ethereum type augmentation
+  - `web/lib/blockchain/contract.ts` — minimal ABI, SurveyStruct type, config helpers
+  - `web/hooks/useWallet.ts` — MetaMask connection + accountsChanged listener
+  - `web/hooks/useNetwork.ts` — chainId detection + switchToSepolia
+  - `web/hooks/useWalletAuth.ts` — nonce → sign → verify login flow
+  - `web/hooks/useSurveyContract.ts` — contract reads + writes via ethers v6
+  - `web/components/ConnectWalletButton.tsx`
+  - `web/components/NetworkGuard.tsx`
+  - `web/components/AuthSignatureButton.tsx`
+  - `web/components/TransactionStatus.tsx`
+  - `web/app/layout.tsx` — nav header with wallet + auth buttons
+  - `web/app/page.tsx` — home page wrapped in NetworkGuard
+- Validation: `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm test` (30/30) all pass.
+- Open risk: hooks each hold independent state; a WalletProvider context wrapper is needed before Phase 11 answer flow so components share the same wallet/auth instance.
+
+## 20. Phase 9 Results
+
+- KYC and Admin Review UI implemented.
+- Mismatch noted: Phase 6 (KYC API routes) is not yet implemented. Phase 9 UI calls the planned Phase 6 API routes. At runtime, calls return 404 until Phase 6 is completed. The hooks handle 404 silently (empty state) to avoid crashing the build.
+- Files created:
+  - `web/lib/kyc/types.ts` — TypeScript types for KYC API responses
+  - `web/hooks/useVerification.ts` — KYC status, submit, on-chain requestVerification
+  - `web/hooks/useAdmin.ts` — admin KYC list, signed URLs, approve, reject
+  - `web/components/KycUploadForm.tsx` — two-step form (upload + on-chain request) with dummy-ID warning
+  - `web/components/VerifiedRespondentPassStatus.tsx` — verification status display
+  - `web/components/KycReviewPanel.tsx` — admin review table with signed URL image preview and approve/reject
+  - `web/app/kyc/page.tsx` — respondent KYC page
+  - `web/app/admin/page.tsx` — admin page
+- Validation: `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm test` (30/30) all pass.
+- Open risks:
+  - Phase 6 API routes missing: `POST /api/kyc/submit`, `GET /api/kyc/status`, `GET /api/admin/kyc-requests`, `POST /api/admin/kyc/[id]/signed-urls`, `POST /api/admin/kyc/[id]/approve`, `POST /api/admin/kyc/[id]/reject`.
+  - Admin authorization is API-enforced only. UI does not gate by on-chain role (would require Phase 6 + reading ADMIN_ROLE from contract).
+  - WalletProvider context still missing — hooks in kyc/page.tsx and admin/page.tsx each call useWallet/useWalletAuth independently.
+
+## 21. Phase 11 Results
+
+- Answer and Proof Transaction Flow implemented.
+- Files created:
+  - `web/hooks/useAnswerSubmission.ts` — state machine hook (idle → starting → answering → submitting → validation_failed | pending_onchain → submitting_onchain → completed); manages attempt, off-chain submit, on-chain proof submit, proof refresh, reset
+  - `web/components/AnswerSurveyForm.tsx` — survey question with radio buttons, attention check ("Which color is the sky?", correct answer "Blue"), hidden honeypot field (positioned off-screen, tabIndex=-1)
+  - `web/components/ResponseQualityResult.tsx` — shows passed/failed validation with score and reason; failed state explicitly says no reward path
+  - `web/components/CompletionProofSubmitter.tsx` — on-chain TX submission; shows proof deadline, handles expired proof with Refresh button, handles cancelled TX with retry message
+  - `web/app/surveys/[id]/page.tsx` — survey answer page using useParams(); loads survey + checks duplicate via contract reads; auto-starts attempt; renders phase-appropriate UI
+- Validation: `pnpm lint`, `pnpm typecheck`, `pnpm build` all pass. 12/12 static pages generated.
+- Open risks:
+  - Phase 6 (KYC API) and Phase 10 (survey feed) still unimplemented. Surveys/[id] page reachable by direct URL only until Phase 10 feed links to it.
+  - WalletProvider context still missing — each page calls useWallet independently; shared state requires a context wrapper or URL-based handoff.
+  - attention check is hardcoded ("Blue"); PRD does not define the check — this is a placeholder that matches PRD spirit (detect inattentive respondents).
