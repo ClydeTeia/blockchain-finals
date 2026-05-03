@@ -13,6 +13,7 @@ type CompletionProofSubmitterProps = {
   error: string | null;
   onSubmitOnChain: () => void;
   onRefreshProof: () => void;
+  onRetryBackendSync: () => void;
 };
 
 export function CompletionProofSubmitter({
@@ -24,7 +25,20 @@ export function CompletionProofSubmitter({
   error,
   onSubmitOnChain,
   onRefreshProof,
+  onRetryBackendSync,
 }: CompletionProofSubmitterProps) {
+  if (phase === "sync_pending") {
+    return (
+      <div>
+        <p style={{ color: "orange" }}>
+          <strong>Transaction confirmed, backend sync pending.</strong>
+        </p>
+        {error && <p style={{ color: "red" }}>{error}</p>}
+        <button onClick={onRetryBackendSync}>Retry Backend Sync</button>
+      </div>
+    );
+  }
+
   if (phase === "completed") {
     return (
       <div>

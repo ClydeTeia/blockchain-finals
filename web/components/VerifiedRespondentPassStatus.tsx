@@ -3,7 +3,7 @@
 import type { VerificationStatus } from "@/lib/kyc/types";
 
 const STATUS_LABELS: Record<VerificationStatus, string> = {
-  none: "Not verified",
+  not_submitted: "Not verified",
   pending: "Pending review",
   approved: "Verified Respondent Pass",
   rejected: "Verification rejected",
@@ -11,7 +11,7 @@ const STATUS_LABELS: Record<VerificationStatus, string> = {
 };
 
 const STATUS_DESCRIPTIONS: Record<VerificationStatus, string> = {
-  none: "Submit a KYC request to receive a Verified Respondent Pass and answer reward surveys.",
+  not_submitted: "Submit a KYC request to receive a Verified Respondent Pass and answer reward surveys.",
   pending: "Your documents are under review. You will be able to answer surveys once approved.",
   approved: "You can now answer funded surveys and earn Sepolia ETH rewards.",
   rejected: "Your verification was rejected.",

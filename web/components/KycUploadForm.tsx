@@ -22,7 +22,7 @@ type KycUploadFormProps = {
   isSubmitting: boolean;
   isRequestingOnChain: boolean;
   error: string | null;
-  onSubmit: (idImage: File, selfieImage: File) => Promise<KycSubmitResponse | null>;
+  onSubmit: (document: File, selfie: File) => Promise<KycSubmitResponse | null>;
   onRequestOnChain: (kycProofHash: string) => Promise<void>;
 };
 
@@ -64,7 +64,7 @@ export function KycUploadForm({
 
   async function handleRequestOnChain() {
     if (!submitted) return;
-    await onRequestOnChain(submitted.kycProofHash);
+    await onRequestOnChain(submitted.proofHash);
     setOnChainDone(true);
   }
 
@@ -81,7 +81,7 @@ export function KycUploadForm({
       <div>
         <p>Documents uploaded. Now request on-chain verification via MetaMask.</p>
         <p>
-          <small>KYC proof hash: <code>{submitted.kycProofHash}</code></small>
+          <small>KYC proof hash: <code>{submitted.proofHash}</code></small>
         </p>
         <button
           onClick={handleRequestOnChain}

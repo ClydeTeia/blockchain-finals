@@ -13,6 +13,7 @@ export type SubmissionPhase =
   | "validation_failed"
   | "pending_onchain"
   | "submitting_onchain"
+  | "sync_pending"
   | "completed";
 
 export type ProofData = {
@@ -69,6 +70,7 @@ export type AnswerSubmissionState = {
   ) => Promise<void>;
   submitOnChain: () => Promise<void>;
   refreshProof: () => Promise<void>;
+  retryBackendConfirmation: () => Promise<void>;
   reset: () => void;
 };
 
@@ -84,6 +86,7 @@ export function useAnswerSubmission(
   const [txHash, setTxHash] = useState<string | null>(null);
   const [txStatus, setTxStatus] = useState<TxStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [lastTxHash, setLastTxHash] = useState<string | null>(null);
 
   const { submitResponseWithProof: contractSubmit } = useSurveyContract(provider);
 
@@ -184,17 +187,26 @@ export function useAnswerSubmission(
         proof.signature
       );
       setTxHash(tx.hash);
+      setLastTxHash(tx.hash);
       await tx.wait();
-      setTxStatus("confirmed");
-      setPhase("completed");
-      // Best-effort: notify backend of on-chain confirmation
-      if (answerId) {
-        fetch(`/api/answers/${answerId}/mark-onchain-confirmed`, {
+      if (!answerId) {
+        throw new Error("Missing answer id for backend confirmation.");
+      }
+      const confirmationResponse = await fetch(
+        `/api/answers/${answerId}/mark-onchain-confirmed`,
+        {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ txHash: tx.hash }),
-        }).catch(() => {});
+          body: JSON.stringify({ txHash: tx.hash })
+        }
+      );
+      setTxStatus("confirmed");
+      if (!confirmationResponse.ok) {
+        setPhase("sync_pending");
+        setError("Transaction confirmed, backend sync pending. Retry confirmation.");
+        return;
       }
+      setPhase("completed");
     } catch (e: unknown) {
       // User cancelled MetaMask or tx reverted — stay pending_onchain so user can retry
       const msg = e instanceof Error ? e.message : "Transaction failed or cancelled.";
@@ -237,6 +249,21 @@ export function useAnswerSubmission(
     }
   }, [answerId]);
 
+  const retryBackendConfirmation = useCallback(async (): Promise<void> => {
+    if (!answerId || !lastTxHash) return;
+    setError(null);
+    const response = await fetch(`/api/answers/${answerId}/mark-onchain-confirmed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ txHash: lastTxHash })
+    });
+    if (response.ok) {
+      setPhase("completed");
+    } else {
+      setError("Transaction confirmed, backend sync pending. Retry confirmation.");
+    }
+  }, [answerId, lastTxHash]);
+
   const reset = useCallback(() => {
     setPhase("idle");
     setAttemptId(null);
@@ -247,6 +274,7 @@ export function useAnswerSubmission(
     setTxHash(null);
     setTxStatus("idle");
     setError(null);
+    setLastTxHash(null);
   }, []);
 
   return {
@@ -264,6 +292,7 @@ export function useAnswerSubmission(
     submitAnswer,
     submitOnChain,
     refreshProof,
+    retryBackendConfirmation,
     reset,
   };
 }

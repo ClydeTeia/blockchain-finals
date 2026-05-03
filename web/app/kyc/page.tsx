@@ -78,7 +78,7 @@ export default function KycPage() {
         </section>
       )}
 
-      {(kycStatus === "none" || kycStatus === "rejected") && (
+      {(kycStatus === "not_submitted" || kycStatus === "rejected") && (
         <section>
           <h2>Submit KYC Documents</h2>
           <KycUploadForm

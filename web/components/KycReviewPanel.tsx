@@ -16,9 +16,9 @@ type KycReviewPanelProps = {
 
 type ImagePreview = {
   requestId: string;
-  idImageUrl: string;
+  documentSignedUrl: string;
   selfieImageUrl: string;
-  expiresAt: string;
+  expiresInSeconds: number;
 };
 
 export function KycReviewPanel({
@@ -43,9 +43,9 @@ export function KycReviewPanel({
     if (urls) {
       setPreview({
         requestId: req.id,
-        idImageUrl: urls.idImageUrl,
-        selfieImageUrl: urls.selfieImageUrl,
-        expiresAt: urls.expiresAt,
+        documentSignedUrl: urls.documentSignedUrl,
+        selfieImageUrl: urls.selfieSignedUrl,
+        expiresInSeconds: urls.expiresInSeconds,
       });
     }
   }
@@ -98,7 +98,7 @@ export function KycReviewPanel({
                 </code>
               </td>
               <td>{req.status}</td>
-              <td>{new Date(req.createdAt).toLocaleDateString()}</td>
+              <td>{new Date(req.submittedAt).toLocaleDateString()}</td>
               <td>
                 <button
                   onClick={() => handleViewImages(req)}
@@ -122,8 +122,8 @@ export function KycReviewPanel({
                     </button>
                   </>
                 )}
-                {req.status === "rejected" && req.rejectionReason && (
-                  <span> Reason: {req.rejectionReason}</span>
+                {req.status === "rejected" && req.decisionReason && (
+                  <span> Reason: {req.decisionReason}</span>
                 )}
               </td>
             </tr>
@@ -158,7 +158,7 @@ export function KycReviewPanel({
         <div role="dialog" aria-label="KYC document review">
           <p>
             <small>
-              Signed URLs expire at {new Date(preview.expiresAt).toLocaleTimeString()}.
+              Signed URLs expire in {preview.expiresInSeconds} seconds.
               Do not screenshot or share these URLs.
             </small>
           </p>
@@ -167,7 +167,7 @@ export function KycReviewPanel({
               <p>ID Image</p>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={preview.idImageUrl}
+                src={preview.documentSignedUrl}
                 alt="Submitted ID document"
                 style={{ maxWidth: "300px" }}
               />

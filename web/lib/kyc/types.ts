@@ -1,5 +1,5 @@
 export type VerificationStatus =
-  | "none"
+  | "not_submitted"
   | "pending"
   | "approved"
   | "rejected"
@@ -8,15 +8,15 @@ export type VerificationStatus =
 export type KycStatusResponse = {
   walletAddress: string;
   status: VerificationStatus;
-  kycProofHash?: string;
-  requestedAt?: string;
+  proofHash?: string;
+  submittedAt?: string;
   reviewedAt?: string;
-  rejectionReason?: string;
+  decisionReason?: string;
 };
 
 export type KycSubmitResponse = {
   requestId: string;
-  kycProofHash: string;
+  proofHash: string;
   status: "pending";
 };
 
@@ -24,14 +24,14 @@ export type KycRequest = {
   id: string;
   walletAddress: string;
   status: VerificationStatus;
-  kycProofHash: string;
-  createdAt: string;
+  proofHash: string;
+  submittedAt: string;
   reviewedAt?: string;
-  rejectionReason?: string;
+  decisionReason?: string | null;
 };
 
 export type SignedUrlsResponse = {
-  idImageUrl: string;
-  selfieImageUrl: string;
-  expiresAt: string;
+  documentSignedUrl: string;
+  selfieSignedUrl: string;
+  expiresInSeconds: number;
 };

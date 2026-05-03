@@ -26,11 +26,6 @@ export function useAdmin(): AdminState {
     try {
       const res = await fetch("/api/admin/kyc-requests");
       if (!res.ok) {
-        if (res.status === 404) {
-          // Phase 6 API not yet implemented
-          setKycRequests([]);
-          return;
-        }
         const err = (await res.json()) as { error?: string };
         throw new Error(err.error ?? "Failed to load KYC requests.");
       }

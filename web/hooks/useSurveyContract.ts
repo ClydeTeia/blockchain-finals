@@ -4,7 +4,8 @@ import { useCallback, useMemo } from "react";
 import { BrowserProvider, Contract, ContractTransactionResponse } from "ethers";
 import {
   SURVEY_REWARD_ABI,
-  SurveyStruct,
+  toSurveySummary,
+  SurveySummary,
   getContractAddress,
 } from "@/lib/blockchain/contract";
 
@@ -15,8 +16,7 @@ export type SurveyContractState = {
   isVerified: (address: string) => Promise<boolean>;
   claimableRewards: (address: string) => Promise<bigint>;
   totalEarned: (address: string) => Promise<bigint>;
-  getSurvey: (surveyId: bigint | number) => Promise<SurveyStruct>;
-  getAllSurveys: () => Promise<SurveyStruct[]>;
+  getSurveySummary: (surveyId: bigint | number) => Promise<SurveySummary>;
   hasSubmitted: (surveyId: bigint | number, address: string) => Promise<boolean>;
   // Writes (require signer — throw if provider is null)
   claimRewards: () => Promise<ContractTransactionResponse>;
@@ -77,18 +77,25 @@ export function useSurveyContract(
     [readContract]
   );
 
-  const getSurvey = useCallback(
-    async (surveyId: bigint | number): Promise<SurveyStruct> => {
+  const getSurveySummary = useCallback(
+    async (surveyId: bigint | number): Promise<SurveySummary> => {
       if (!readContract) throw new Error("Contract not ready.");
-      return readContract.getSurvey(surveyId) as Promise<SurveyStruct>;
+      const survey = (await readContract.surveys(surveyId)) as {
+        creator: string;
+        title: string;
+        description: string;
+        question: string;
+        rewardPerResponse: bigint;
+        maxResponses: bigint;
+        responseCount: bigint;
+        escrowRemaining: bigint;
+        active: boolean;
+        unusedRewardsWithdrawn: boolean;
+      };
+      return toSurveySummary(surveyId, survey);
     },
     [readContract]
   );
-
-  const getAllSurveys = useCallback(async (): Promise<SurveyStruct[]> => {
-    if (!readContract) throw new Error("Contract not ready.");
-    return readContract.getAllSurveys() as Promise<SurveyStruct[]>;
-  }, [readContract]);
 
   const hasSubmitted = useCallback(
     async (surveyId: bigint | number, address: string): Promise<boolean> => {
@@ -142,8 +149,7 @@ export function useSurveyContract(
     isVerified,
     claimableRewards,
     totalEarned,
-    getSurvey,
-    getAllSurveys,
+    getSurveySummary,
     hasSubmitted,
     claimRewards,
     submitResponseWithProof,

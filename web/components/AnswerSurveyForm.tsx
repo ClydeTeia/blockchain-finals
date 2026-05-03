@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import type { SurveyStruct } from "@/lib/blockchain/contract";
+import type { SurveySummary } from "@/lib/blockchain/contract";
 
 const ATTENTION_CHECK_QUESTION = "Which color is the sky on a clear day?";
 const ATTENTION_CHECK_OPTIONS = ["Red", "Green", "Blue", "Yellow"];
 const ATTENTION_CHECK_CORRECT = "Blue";
 
 type AnswerSurveyFormProps = {
-  survey: SurveyStruct;
+  survey: SurveySummary;
   startedAt: Date;
   isSubmitting: boolean;
   error: string | null;
@@ -27,6 +27,7 @@ export function AnswerSurveyForm({
   onSubmit,
 }: AnswerSurveyFormProps) {
   const [selected, setSelected] = useState<string>("");
+  const [textAnswer, setTextAnswer] = useState<string>("");
   const [attentionAnswer, setAttentionAnswer] = useState<string>("");
   // Hidden honeypot — must stay empty; bots tend to fill all visible fields
   const [honeypot, setHoneypot] = useState<string>("");
@@ -42,7 +43,8 @@ export function AnswerSurveyForm({
       return;
     }
 
-    if (!selected) {
+    const answerValue = survey.options?.length ? selected : textAnswer.trim();
+    if (!answerValue) {
       setLocalError("Select an answer before submitting.");
       return;
     }
@@ -59,7 +61,7 @@ export function AnswerSurveyForm({
     );
 
     onSubmit(
-      { answer: selected },
+      { answer: answerValue },
       survey.rewardPerResponse.toString(),
       completionTimeSeconds
     );
@@ -71,7 +73,7 @@ export function AnswerSurveyForm({
     <form onSubmit={handleSubmit}>
       <section>
         <h2>{survey.question}</h2>
-        {survey.options.map((opt) => (
+        {survey.options?.length ? survey.options.map((opt) => (
           <label key={opt} style={{ display: "block", marginBottom: "0.5rem" }}>
             <input
               type="radio"
@@ -83,7 +85,15 @@ export function AnswerSurveyForm({
             />{" "}
             {opt}
           </label>
-        ))}
+        )) : (
+          <textarea
+            value={textAnswer}
+            onChange={(event) => setTextAnswer(event.target.value)}
+            disabled={isSubmitting}
+            rows={4}
+            placeholder="Type your answer"
+          />
+        )}
       </section>
 
       <section style={{ marginTop: "1.5rem" }}>
@@ -123,7 +133,7 @@ export function AnswerSurveyForm({
 
       <button
         type="submit"
-        disabled={isSubmitting || !selected}
+        disabled={isSubmitting || !(survey.options?.length ? selected : textAnswer.trim())}
         style={{ marginTop: "1.5rem" }}
       >
         {isSubmitting ? "Submitting..." : "Submit Answer"}

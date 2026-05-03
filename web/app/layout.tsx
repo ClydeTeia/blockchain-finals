@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { AuthSignatureButton } from "@/components/AuthSignatureButton";
+import { WalletProvider } from "@/hooks/useWallet";
+import { WalletAuthProvider } from "@/hooks/useWalletAuth";
 
 export const metadata: Metadata = {
   title: "SurveyChain Rewards",
@@ -13,16 +15,20 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <header>
-          <nav>
-            <span>SurveyChain Rewards</span>
-            <div>
-              <ConnectWalletButton />
-              <AuthSignatureButton />
-            </div>
-          </nav>
-        </header>
-        <main>{children}</main>
+        <WalletProvider>
+          <WalletAuthProvider>
+            <header>
+              <nav>
+                <span>SurveyChain Rewards</span>
+                <div>
+                  <ConnectWalletButton />
+                  <AuthSignatureButton />
+                </div>
+              </nav>
+            </header>
+            <main>{children}</main>
+          </WalletAuthProvider>
+        </WalletProvider>
       </body>
     </html>
   );

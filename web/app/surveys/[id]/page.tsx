@@ -10,7 +10,7 @@ import { useWallet } from "@/hooks/useWallet";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { useSurveyContract } from "@/hooks/useSurveyContract";
 import { useAnswerSubmission } from "@/hooks/useAnswerSubmission";
-import type { SurveyStruct } from "@/lib/blockchain/contract";
+import type { SurveySummary } from "@/lib/blockchain/contract";
 
 export default function SurveyAnswerPage() {
   const params = useParams();
@@ -18,9 +18,9 @@ export default function SurveyAnswerPage() {
 
   const { account, provider } = useWallet();
   const { isAuthenticated, isLoading: authLoading } = useWalletAuth();
-  const { getSurvey, hasSubmitted, isReady } = useSurveyContract(provider);
+  const { getSurveySummary, hasSubmitted, isReady } = useSurveyContract(provider);
 
-  const [survey, setSurvey] = useState<SurveyStruct | null>(null);
+  const [survey, setSurvey] = useState<SurveySummary | null>(null);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoadingSurvey, setIsLoadingSurvey] = useState(false);
@@ -38,6 +38,7 @@ export default function SurveyAnswerPage() {
     submitAnswer,
     submitOnChain,
     refreshProof,
+    retryBackendConfirmation,
     reset,
   } = useAnswerSubmission(provider);
 
@@ -47,7 +48,7 @@ export default function SurveyAnswerPage() {
     setIsLoadingSurvey(true);
     setLoadError(null);
 
-    Promise.all([getSurvey(BigInt(surveyId)), hasSubmitted(BigInt(surveyId), account)])
+    Promise.all([getSurveySummary(BigInt(surveyId)), hasSubmitted(BigInt(surveyId), account)])
       .then(([s, submitted]) => {
         setSurvey(s);
         setAlreadySubmitted(submitted);
@@ -56,7 +57,7 @@ export default function SurveyAnswerPage() {
         setLoadError(e instanceof Error ? e.message : "Failed to load survey.");
       })
       .finally(() => setIsLoadingSurvey(false));
-  }, [isReady, account, surveyId, getSurvey, hasSubmitted]);
+  }, [isReady, account, surveyId, getSurveySummary, hasSubmitted]);
 
   // Auto-start attempt once survey loads and user hasn't already answered
   useEffect(() => {
@@ -128,6 +129,7 @@ export default function SurveyAnswerPage() {
 
           {(phase === "pending_onchain" ||
             phase === "submitting_onchain" ||
+            phase === "sync_pending" ||
             phase === "completed") && (
             <>
               {validationResult && (
@@ -142,6 +144,7 @@ export default function SurveyAnswerPage() {
                 error={submissionError}
                 onSubmitOnChain={submitOnChain}
                 onRefreshProof={refreshProof}
+                onRetryBackendSync={retryBackendConfirmation}
               />
             </>
           )}

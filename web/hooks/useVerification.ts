@@ -7,6 +7,7 @@ import type {
   KycSubmitResponse,
   VerificationStatus,
 } from "@/lib/kyc/types";
+import { buildKycFormData, mapVerificationStatus } from "@/lib/kyc/adapters";
 import { useSurveyContract } from "@/hooks/useSurveyContract";
 
 export type VerificationState = {
@@ -26,7 +27,7 @@ export function useVerification(
   walletAddress: string | null,
   provider: BrowserProvider | null
 ): VerificationState {
-  const [kycStatus, setKycStatus] = useState<VerificationStatus>("none");
+  const [kycStatus, setKycStatus] = useState<VerificationStatus>("not_submitted");
   const [kycProofHash, setKycProofHash] = useState<string | null>(null);
   const [onChainVerified, setOnChainVerified] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -53,8 +54,8 @@ export function useVerification(
         statusResult.value.ok
       ) {
         const data = (await statusResult.value.json()) as KycStatusResponse;
-        setKycStatus(data.status);
-        setKycProofHash(data.kycProofHash ?? null);
+        setKycStatus(mapVerificationStatus(data.status));
+        setKycProofHash(data.proofHash ?? null);
       } else if (
         statusResult.status === "fulfilled" &&
         statusResult.value.status !== 404
@@ -77,13 +78,11 @@ export function useVerification(
   }, [refresh]);
 
   const submitKyc = useCallback(
-    async (idImage: File, selfieImage: File): Promise<KycSubmitResponse | null> => {
+    async (document: File, selfie: File): Promise<KycSubmitResponse | null> => {
       setIsSubmitting(true);
       setError(null);
       try {
-        const formData = new FormData();
-        formData.append("idImage", idImage);
-        formData.append("selfieImage", selfieImage);
+        const formData = buildKycFormData(document, selfie);
         const res = await fetch("/api/kyc/submit", {
           method: "POST",
           body: formData,
@@ -94,7 +93,7 @@ export function useVerification(
         }
         const data = (await res.json()) as KycSubmitResponse;
         setKycStatus("pending");
-        setKycProofHash(data.kycProofHash);
+        setKycProofHash(data.proofHash);
         return data;
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : "KYC submission failed.";
