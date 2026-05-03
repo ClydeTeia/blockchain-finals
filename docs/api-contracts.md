@@ -119,6 +119,92 @@
   - `walletAddress: string`
   - `answers: AnswerSummary[]`
 
+  ## KYC and Admin Review Routes (Phase 6)
+
+  ### `POST /api/kyc/submit`
+  - Auth:
+    - Requires valid session cookie.
+  - Request:
+    - `multipart/form-data` with files:
+      - `document: File`
+      - `selfie: File`
+  - Behavior:
+    - Validates file mime type and size.
+    - Computes SHA-256 hash for both files.
+    - Creates proof hash for on-chain verification linkage.
+    - Uploads to private `kyc-documents` bucket using request UUID paths.
+    - Stores KYC request row with `pending` status.
+  - Response JSON:
+    - `requestId: string`
+    - `walletAddress: string`
+    - `status: "pending"`
+    - `proofHash: string`
+    - `submittedAt: string` (ISO-8601)
+
+  ### `GET /api/kyc/status`
+  - Auth:
+    - Requires valid session cookie.
+  - Behavior:
+    - Returns latest KYC request for authenticated wallet.
+  - Response JSON:
+    - No submission: `{ walletAddress, status: "not_submitted" }`
+    - Existing submission: `{ requestId, walletAddress, status, proofHash, submittedAt, reviewedAt, decisionReason }`
+
+  ### `GET /api/admin/kyc-requests`
+  - Auth:
+    - Requires admin/verifier allowlisted wallet session.
+  - Query:
+    - Optional `status` filter: `pending | approved | rejected | revoked`
+  - Response JSON:
+    - `count: number`
+    - `requests: KycRequestSummary[]`
+
+  ### `POST /api/admin/kyc/:id/signed-urls`
+  - Auth:
+    - Requires admin/verifier allowlisted wallet session.
+  - Request JSON (optional):
+    - `expiresInSeconds?: number` (clamped to 30..600)
+  - Behavior:
+    - Returns short-lived signed URLs for private document and selfie objects.
+  - Response JSON:
+    - `requestId: string`
+    - `expiresInSeconds: number`
+    - `documentSignedUrl: string`
+    - `selfieSignedUrl: string`
+
+  ### `POST /api/admin/kyc/:id/approve`
+  - Auth:
+    - Requires admin/verifier allowlisted wallet session.
+  - Request JSON (optional):
+    - `reason?: string`
+  - Behavior:
+    - Updates pending request status to `approved`.
+    - Stores reviewer wallet, review timestamp, and reason.
+  - Response JSON:
+    - `requestId: string`
+    - `walletAddress: string`
+    - `status: "approved"`
+    - `reviewedAt: string | null`
+    - `reviewerWallet: string | null`
+    - `decisionReason: string | null`
+    - `proofHash: string`
+
+  ### `POST /api/admin/kyc/:id/reject`
+  - Auth:
+    - Requires admin/verifier allowlisted wallet session.
+  - Request JSON (optional):
+    - `reason?: string`
+  - Behavior:
+    - Updates pending request status to `rejected`.
+    - Stores reviewer wallet, review timestamp, and reason.
+  - Response JSON:
+    - `requestId: string`
+    - `walletAddress: string`
+    - `status: "rejected"`
+    - `reviewedAt: string | null`
+    - `reviewerWallet: string | null`
+    - `decisionReason: string | null`
+
 ## Security Notes
 - Session identity source is server-verified session cookie, not request body wallet address.
 - Nonces are one-time and expire.
