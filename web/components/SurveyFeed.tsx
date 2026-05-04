@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { SurveyCard } from "@/components/SurveyCard";
 import { useWallet } from "@/hooks/useWallet";
 import { useSurveys } from "@/hooks/useSurveys";
 
 export function SurveyFeed() {
+  const router = useRouter();
   const { account } = useWallet();
   const { surveys, isLoading: loading, error, refetch } = useSurveys();
   const [filter, setFilter] = useState<string>("all");
@@ -97,6 +99,7 @@ export function SurveyFeed() {
               <SurveyCard
                 key={survey.id}
                 survey={survey}
+                onAnswerClick={(surveyId) => router.push(`/surveys/${surveyId}`)}
               />
             ))}
           </div>
@@ -185,7 +188,11 @@ export function SurveyFeed() {
         }}
         >
           {filteredSurveys.map((survey) => (
-            <SurveyCard key={survey.id} survey={survey} />
+            <SurveyCard
+              key={survey.id}
+              survey={survey}
+              onAnswerClick={(surveyId) => router.push(`/surveys/${surveyId}`)}
+            />
           ))}
         </div>
       )}
