@@ -35,12 +35,11 @@ export function VerifiedRespondentPassStatus({
     return <p>Loading verification status...</p>;
   }
 
-  const isApproved = status === "approved" || onChainVerified === true;
   const description = STATUS_DESCRIPTIONS[status];
 
   return (
     <div>
-      <h3>{isApproved ? "? " : ""}{STATUS_LABELS[status]}</h3>
+      <h3>{STATUS_LABELS[status]}</h3>
       <p>{description}</p>
       {status === "rejected" && rejectionReason && (
         <p>Reason: {rejectionReason}</p>
