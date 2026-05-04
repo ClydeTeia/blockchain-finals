@@ -41,8 +41,11 @@ export default function KycPage() {
   }
 
   // Pending API submission + on-chain step not yet done
+  const onChainProofHash = kycProofHash ?? "";
   const needsOnChainStep =
-    kycStatus === "pending" && kycProofHash && !onChainVerified;
+    (kycStatus === "pending" || kycStatus === "approved") &&
+    Boolean(onChainProofHash) &&
+    !onChainVerified;
 
   return (
     <NetworkGuard>
@@ -63,12 +66,12 @@ export default function KycPage() {
           </p>
           <p>
             <small>
-              KYC proof hash: <code>{kycProofHash}</code>
+              KYC proof hash: <code>{onChainProofHash}</code>
             </small>
           </p>
           {error && <p style={{ color: "red" }}>{error}</p>}
           <button
-            onClick={() => requestOnChainVerification(kycProofHash)}
+            onClick={() => requestOnChainVerification(onChainProofHash)}
             disabled={!provider || isRequestingOnChain}
           >
             {isRequestingOnChain
