@@ -111,7 +111,8 @@ export async function GET(request: Request) {
         ];
         return {
           ...survey,
-          questions: questionSet.length > 0 ? questionSet : fallback
+          questions: questionSet.length > 0 ? questionSet : fallback,
+          questionSetPersisted: questionSet.length > 0
         };
       })
     });

@@ -18,6 +18,7 @@ type SurveyCardProps = {
     active: boolean;
     unusedRewardsWithdrawn: boolean;
     options: string[];
+    questionSetPersisted?: boolean;
     questions?: Array<{
       id: string;
       prompt: string;
@@ -110,6 +111,13 @@ export function SurveyCard({ survey, onAnswerClick }: SurveyCardProps) {
           <p className="text-xs text-muted mt-2">{survey.questions.length} questions total</p>
         )}
       </div>
+
+      {survey.questionSetPersisted === false && (
+        <div className="p-3 bg-amber-50 text-amber-800 border border-amber-200 text-sm font-medium rounded">
+          This survey is using fallback question data. Full question set was not saved.
+          {isCreator ? " Re-save question content from creator tools." : ""}
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-4">
         <div>

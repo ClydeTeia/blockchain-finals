@@ -58,6 +58,7 @@ export async function GET(
         required: true
       }
     ];
+    let questionSetPersisted = false;
 
     if (hasDatabaseConfig()) {
       const db = getDb();
@@ -73,6 +74,7 @@ export async function GET(
           const parsed = sanitizeSurveyQuestions(row?.questionsJson);
           if (parsed.length > 0) {
             questions = parsed;
+            questionSetPersisted = true;
           }
         } catch (error) {
           if (isMissingQuestionSetTableError(error)) {
@@ -98,7 +100,8 @@ export async function GET(
         active: survey.active,
         unusedRewardsWithdrawn: survey.unusedRewardsWithdrawn,
         options: [],
-        questions
+        questions,
+        questionSetPersisted
       }
     });
   } catch (error) {

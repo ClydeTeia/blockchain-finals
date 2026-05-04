@@ -14,6 +14,14 @@ type BuilderQuestion = {
   options: string[];
 };
 
+type PersistedQuestion = {
+  id: string;
+  prompt: string;
+  type: "multiple_choice" | "text";
+  required: boolean;
+  options?: string[];
+};
+
 function newQuestion(index: number): BuilderQuestion {
   return {
     id: `q_${index + 1}`,
@@ -39,6 +47,11 @@ export function CreateSurveyForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [pendingQuestionSetSync, setPendingQuestionSetSync] = useState<{
+    surveyId: string;
+    questions: PersistedQuestion[];
+  } | null>(null);
+  const [isRetryingQuestionSet, setIsRetryingQuestionSet] = useState(false);
 
   const totalRewardPoolWei = (() => {
     try {
@@ -147,6 +160,7 @@ export function CreateSurveyForm() {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setPendingQuestionSetSync(null);
 
     if (!account) {
       setError("Please connect your wallet first.");
@@ -281,12 +295,22 @@ export function CreateSurveyForm() {
           body: JSON.stringify({ questions: cleanedQuestions }),
         });
 
-        if (!metadataResponse.ok) {
-          const payload = (await metadataResponse.json().catch(() => ({}))) as { error?: string };
+        const payload = (await metadataResponse.json().catch(() => ({}))) as { error?: string; persisted?: boolean; warning?: string };
+        if (!metadataResponse.ok || payload.persisted === false) {
           metadataWarning = payload.error || "Failed to save question set.";
+          if (payload.warning) {
+            metadataWarning = payload.warning;
+          }
         }
       } catch {
         metadataWarning = "Failed to save question set.";
+      }
+
+      if (metadataWarning) {
+        setPendingQuestionSetSync({
+          surveyId: createdSurveyId.toString(),
+          questions: cleanedQuestions
+        });
       }
 
       setSuccess(
@@ -305,6 +329,32 @@ export function CreateSurveyForm() {
       setError(message);
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function retryQuestionSetSync() {
+    if (!pendingQuestionSetSync) {
+      return;
+    }
+
+    setIsRetryingQuestionSet(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/surveys/${pendingQuestionSetSync.surveyId}/questions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questions: pendingQuestionSetSync.questions })
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string; persisted?: boolean; warning?: string };
+      if (!response.ok || payload.persisted === false) {
+        throw new Error(payload.error || payload.warning || "Failed to save question set.");
+      }
+      setSuccess(`Survey questions saved successfully for survey ID: ${pendingQuestionSetSync.surveyId}.`);
+      setPendingQuestionSetSync(null);
+    } catch (syncError: unknown) {
+      setError(syncError instanceof Error ? syncError.message : "Failed to save question set.");
+    } finally {
+      setIsRetryingQuestionSet(false);
     }
   }
 
@@ -331,6 +381,20 @@ export function CreateSurveyForm() {
       {success && (
         <div className="surface text-sm" style={{ borderColor: "var(--success)", color: "#065f46" }}>
           {success}
+        </div>
+      )}
+
+      {pendingQuestionSetSync && (
+        <div className="surface text-sm" style={{ borderColor: "var(--warning)", color: "#92400e" }}>
+          <p>Survey {pendingQuestionSetSync.surveyId} was created, but questions were not persisted.</p>
+          <button
+            type="button"
+            onClick={retryQuestionSetSync}
+            disabled={isRetryingQuestionSet}
+            className="btn btn-secondary mt-2"
+          >
+            {isRetryingQuestionSet ? "Retrying..." : "Retry Saving Questions"}
+          </button>
         </div>
       )}
 

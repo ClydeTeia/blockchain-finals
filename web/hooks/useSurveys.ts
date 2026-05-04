@@ -15,6 +15,7 @@ export type SurveySummary = {
   active: boolean;
   unusedRewardsWithdrawn: boolean;
   options: string[];
+  questionSetPersisted?: boolean;
   questions?: Array<{
     id: string;
     prompt: string;

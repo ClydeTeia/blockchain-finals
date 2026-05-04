@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 
@@ -27,10 +27,6 @@ type AnswerSurveyFormProps = {
   ) => void;
 };
 
-const ATTENTION_CHECK_QUESTION = "Which color is the sky on a clear day?";
-const ATTENTION_CHECK_OPTIONS = ["Red", "Green", "Blue", "Yellow"];
-const ATTENTION_CHECK_CORRECT = "Blue";
-
 export function AnswerSurveyForm({
   survey,
   startedAt,
@@ -55,9 +51,11 @@ export function AnswerSurveyForm({
   }, [survey]);
 
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [attentionAnswer, setAttentionAnswer] = useState<string>("");
   const [honeypot, setHoneypot] = useState<string>("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
+
+  const currentQuestion = questions[stepIndex];
 
   function setAnswer(questionId: string, value: string) {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
@@ -80,11 +78,6 @@ export function AnswerSurveyForm({
       }
     }
 
-    if (attentionAnswer !== ATTENTION_CHECK_CORRECT) {
-      setLocalError("Attention check failed. Please read each question carefully.");
-      return;
-    }
-
     const completionTimeSeconds = Math.floor(
       (Date.now() - startedAt.getTime()) / 1000
     );
@@ -93,37 +86,39 @@ export function AnswerSurveyForm({
   }
 
   const displayError = localError ?? error;
-  const hasRequiredAnswers = questions.every(
-    (question) => !question.required || Boolean(answers[question.id]?.trim())
-  );
+  const canGoNext = (() => {
+    if (!currentQuestion) return false;
+    if (!currentQuestion.required) return true;
+    return Boolean(answers[currentQuestion.id]?.trim());
+  })();
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      {questions.map((question, index) => (
-        <section key={question.id} className="surface">
-          <h2 className="text-lg font-semibold mb-2">{`Question ${index + 1}`}</h2>
-          <p className="text-base mb-3">{question.prompt}</p>
+      {currentQuestion && (
+        <section key={currentQuestion.id} className="surface">
+          <h2 className="text-lg font-semibold mb-2">{`Question ${stepIndex + 1} of ${questions.length}`}</h2>
+          <p className="text-base mb-3">{currentQuestion.prompt}</p>
 
-          {question.type === "multiple_choice" && question.options?.length ? (
+          {currentQuestion.type === "multiple_choice" && currentQuestion.options?.length ? (
             <div className="flex flex-col gap-2">
-              {question.options.map((option) => (
-                <label key={option} className="text-sm" style={{ display: "block" }}>
+              {currentQuestion.options.map((option) => (
+                <label key={option} className="flex items-center gap-2 text-sm cursor-pointer">
                   <input
                     type="radio"
-                    name={`answer-${question.id}`}
+                    name={`answer-${currentQuestion.id}`}
                     value={option}
-                    checked={answers[question.id] === option}
-                    onChange={() => setAnswer(question.id, option)}
+                    checked={answers[currentQuestion.id] === option}
+                    onChange={() => setAnswer(currentQuestion.id, option)}
                     disabled={isSubmitting}
-                  />{" "}
-                  {option}
+                  />
+                  <span>{option}</span>
                 </label>
               ))}
             </div>
           ) : (
             <textarea
-              value={answers[question.id] ?? ""}
-              onChange={(event) => setAnswer(question.id, event.target.value)}
+              value={answers[currentQuestion.id] ?? ""}
+              onChange={(event) => setAnswer(currentQuestion.id, event.target.value)}
               disabled={isSubmitting}
               rows={4}
               className="form-input"
@@ -131,26 +126,7 @@ export function AnswerSurveyForm({
             />
           )}
         </section>
-      ))}
-
-      <section className="surface">
-        <h3 className="text-base font-semibold mb-2">{ATTENTION_CHECK_QUESTION}</h3>
-        <div className="flex flex-col gap-2">
-          {ATTENTION_CHECK_OPTIONS.map((opt) => (
-            <label key={opt} className="text-sm" style={{ display: "block" }}>
-              <input
-                type="radio"
-                name="attention"
-                value={opt}
-                checked={attentionAnswer === opt}
-                onChange={() => setAttentionAnswer(opt)}
-                disabled={isSubmitting}
-              />{" "}
-              {opt}
-            </label>
-          ))}
-        </div>
-      </section>
+      )}
 
       <div style={{ position: "absolute", left: "-9999px", top: "-9999px" }} aria-hidden="true">
         <label htmlFor="website">Leave blank</label>
@@ -165,11 +141,35 @@ export function AnswerSurveyForm({
         />
       </div>
 
-      {displayError && <p style={{ color: "red" }}>{displayError}</p>}
-
-      <button type="submit" disabled={isSubmitting || !hasRequiredAnswers} className="btn btn-primary">
-        {isSubmitting ? "Submitting..." : "Submit Answer"}
-      </button>
+      {displayError && <p className="text-danger text-sm font-medium">{displayError}</p>}
+      <div className="flex gap-2 mt-2">
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={isSubmitting || stepIndex === 0}
+          onClick={() => setStepIndex((prev) => Math.max(0, prev - 1))}
+        >
+          Previous
+        </button>
+        {stepIndex < questions.length - 1 ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={isSubmitting || !canGoNext}
+            onClick={() => setStepIndex((prev) => Math.min(questions.length - 1, prev + 1))}
+          >
+            Next
+          </button>
+        ) : (
+          <button 
+            type="submit" 
+            disabled={isSubmitting || !canGoNext} 
+            className="btn btn-primary"
+          >
+            {isSubmitting ? "Submitting..." : "Submit Answer"}
+          </button>
+        )}
+      </div>
     </form>
   );
 }
