@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo } from "react";
-import { BrowserProvider, Contract, ContractTransactionResponse } from "ethers";
+import { BrowserProvider, Contract, ContractTransactionResponse, JsonRpcProvider } from "ethers";
 import {
   SURVEY_REWARD_ABI,
   toSurveySummary,
@@ -46,11 +46,18 @@ export function useSurveyContract(
   provider: BrowserProvider | null
 ): SurveyContractState {
   const contractAddress = getContractAddress();
+  const rpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL ?? process.env.SEPOLIA_RPC_URL ?? null;
 
   const readContract = useMemo(() => {
-    if (!provider || !contractAddress) return null;
-    return new Contract(contractAddress, SURVEY_REWARD_ABI, provider);
-  }, [provider, contractAddress]);
+    if (!contractAddress) return null;
+    if (provider) {
+      return new Contract(contractAddress, SURVEY_REWARD_ABI, provider);
+    }
+    if (rpcUrl) {
+      return new Contract(contractAddress, SURVEY_REWARD_ABI, new JsonRpcProvider(rpcUrl));
+    }
+    return null;
+  }, [provider, contractAddress, rpcUrl]);
 
   const writeContract = useCallback(async () => {
     if (!provider || !contractAddress) {
