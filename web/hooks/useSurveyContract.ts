@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { BrowserProvider, Contract, ContractTransactionResponse } from "ethers";
 import {
   SURVEY_REWARD_ABI,
@@ -29,6 +29,15 @@ export type SurveyContractState = {
     signature: string
   ) => Promise<ContractTransactionResponse>;
   requestVerification: (kycProofHash: string) => Promise<ContractTransactionResponse>;
+  createSurvey: (
+    title: string,
+    description: string,
+    question: string,
+    options: string[],
+    rewardPerResponse: bigint,
+    maxResponses: bigint,
+    value: bigint
+  ) => Promise<ContractTransactionResponse>;
 };
 
 export function useSurveyContract(
@@ -108,6 +117,17 @@ export function useSurveyContract(
     [readContract]
   );
 
+  const getAnswerHash = useCallback(
+    async (surveyId: bigint | number, address: string): Promise<string> => {
+      if (!readContract) throw new Error("Contract not ready.");
+      const response = (await readContract.responses(surveyId, address)) as any;
+      // ResponseRecord struct: (surveyId, respondent, answerHash, status, submittedAt, rewardAmount)
+      // The answerHash is the third element (index 2)
+      return response[2];
+    },
+    [readContract]
+  );
+
   const claimRewards = useCallback(async (): Promise<ContractTransactionResponse> => {
     const c = await writeContract();
     return c.claimRewards() as Promise<ContractTransactionResponse>;
@@ -143,6 +163,24 @@ export function useSurveyContract(
     [writeContract]
   );
 
+  const createSurvey = useCallback(
+    async (
+      title: string,
+      description: string,
+      question: string,
+      options: string[],
+      rewardPerResponse: bigint,
+      maxResponses: bigint,
+      value: bigint
+    ): Promise<ContractTransactionResponse> => {
+      const c = await writeContract();
+      return c.createSurvey(title, description, question, options, rewardPerResponse, maxResponses, {
+        value,
+      }) as Promise<ContractTransactionResponse>;
+    },
+    [writeContract]
+  );
+
   return {
     isReady: !!readContract,
     contractAddress,
@@ -154,5 +192,6 @@ export function useSurveyContract(
     claimRewards,
     submitResponseWithProof,
     requestVerification,
+    createSurvey,
   };
 }
