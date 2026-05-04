@@ -130,4 +130,4 @@ Add all external references used by the team.
 ## Notes
 - Current repository status and phase tracking are documented in:
   - `docs/execution-plans/active/surveychain-implementation-plan.md`
-  - `docs/deployment-blockers.md`
+  - `docs/integration-validation-report.md`

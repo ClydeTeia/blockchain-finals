@@ -40,5 +40,7 @@ Date: 2026-05-04
 - Fixed runtime bug in `/api/surveys`: `bigint` survey count now converted safely to `number`.
 - Fixed runtime bug in `/api/admin/answers`: answer payload is now JSON-serializable (no raw `bigint` leakage).
 
-## Remaining non-code validation
-- Full wallet-to-chain demo flow still requires deployed Sepolia contract + configured env values.
+## Deployment evidence
+- Sepolia contract address: `0xd44964682B6a86C02a9743A67f37388Fa2303CD3`
+- Etherscan: `https://sepolia.etherscan.io/address/0xd44964682B6a86C02a9743A67f37388Fa2303CD3`
+- Live frontend URL: `https://blockchain-finals.vercel.app/`

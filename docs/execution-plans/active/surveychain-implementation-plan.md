@@ -2308,19 +2308,21 @@ Allowed statuses: `completed`, `partially_completed`, `pending`, `blocked`.
 | 11 | completed | answer/proof UI flow + proof refresh/mark-onchain routes + tests | none | none |
 | 12 | completed | rewards dashboard + admin answer APIs + `phase12-admin-rewards.test.ts` | none | none |
 | 13 | completed | `docs/integration-validation-report.md` + full validation pass | none | none |
-| 14 | blocked | deployment artifacts not executable without external credentials | requires Sepolia/Vercel access | provide deploy credentials/access, then publish URLs |
+| 14 | completed | deployed Sepolia contract + live Vercel URL documented in README and docs | none | none |
 | 15 | completed | `docs/cleanup-audit.md` + drift reconciliation and cleanup checklist | none | none |
 
 ## 27. Definition of Done Snapshot (2026-05-04)
 
-- Completed phases: `0` through `13`, plus `15`
-- Blocked phase: `14` (external deployment access)
+- Completed phases: `0` through `15`
+- Blocked phases: none
 - Validation commands all passing locally:
   - `pnpm test`
   - `pnpm lint`
   - `pnpm typecheck`
   - `pnpm build`
 
-## 28. Deployment Blocker Reference
+## 28. Deployment Evidence
 
-- See `docs/deployment-blockers.md` for explicit inputs required to complete Phase 14 and publish final contract/live URLs.
+- Contract address (Sepolia): `0xd44964682B6a86C02a9743A67f37388Fa2303CD3`
+- Etherscan: `https://sepolia.etherscan.io/address/0xd44964682B6a86C02a9743A67f37388Fa2303CD3`
+- Live URL: `https://blockchain-finals.vercel.app/`

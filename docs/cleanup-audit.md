@@ -28,5 +28,4 @@ Date: 2026-05-04
 - `pnpm build`: passed
 
 ## Open technical debt
-- Deployment evidence is still external-environment dependent (see `docs/deployment-blockers.md`).
 - `web/package-lock.json` coexists with pnpm workspace lockfile and causes Next.js root-inference warning during build.
