@@ -47,13 +47,19 @@ export function SurveyCard({ survey, onAnswerClick }: SurveyCardProps) {
     async function checkStatus() {
       try {
         setLoading(true);
-        const [submitted, verified, onChainAdmin] = await Promise.all([
+        const [submitted, verified, onChainAdmin, kycStatusResponse] = await Promise.all([
           contract.hasSubmitted(survey.id, account as string).catch(() => false),
           contract.isVerified(account as string).catch(() => false),
           contract.hasAdminRole(account as string).catch(() => false),
+          fetch("/api/kyc/status").catch(() => null),
         ]);
+        let offChainVerified = false;
+        if (kycStatusResponse?.ok) {
+          const statusPayload = (await kycStatusResponse.json()) as { status?: string };
+          offChainVerified = statusPayload.status === "approved";
+        }
         setHasSubmitted(submitted);
-        setIsVerified(verified);
+        setIsVerified(verified || offChainVerified);
         setHasOnChainAdminRole(onChainAdmin);
       } catch (err) {
         console.warn("Could not check survey status:", err);

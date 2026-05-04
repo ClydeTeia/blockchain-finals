@@ -36,10 +36,7 @@ export function VerifiedRespondentPassStatus({
   }
 
   const isApproved = status === "approved" || onChainVerified === true;
-  const isOffChainApprovedOnly = status === "approved" && onChainVerified === false;
-  const description = isOffChainApprovedOnly
-    ? "KYC is approved, but on-chain verification is still pending. Complete the on-chain step before answering funded surveys."
-    : STATUS_DESCRIPTIONS[status];
+  const description = STATUS_DESCRIPTIONS[status];
 
   return (
     <div>

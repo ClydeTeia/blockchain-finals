@@ -1,4 +1,5 @@
 import { Contract, JsonRpcProvider, getAddress, isAddress } from "ethers";
+import { getLatestKycRequestByWallet } from "@/lib/kyc/data-store";
 
 const verificationAbi = [
   "function isVerified(address wallet) view returns (bool)",
@@ -21,6 +22,15 @@ export async function isWalletVerified(walletAddress: string): Promise<boolean> 
     return false;
   }
   const normalized = getAddress(walletAddress);
+
+  try {
+    const latestKyc = await getLatestKycRequestByWallet(normalized);
+    if (latestKyc?.status === "approved") {
+      return true;
+    }
+  } catch {
+    // Continue with on-chain/allowlist fallback when off-chain store is unavailable.
+  }
 
   const rpcUrl = process.env.SEPOLIA_RPC_URL;
   const contractAddress = process.env.CONTRACT_ADDRESS;

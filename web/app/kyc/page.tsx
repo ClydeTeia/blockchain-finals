@@ -43,9 +43,7 @@ export default function KycPage() {
   // Pending API submission + on-chain step not yet done
   const onChainProofHash = kycProofHash ?? "";
   const needsOnChainStep =
-    (kycStatus === "pending" || kycStatus === "approved") &&
-    Boolean(onChainProofHash) &&
-    !onChainVerified;
+    kycStatus === "pending" && Boolean(onChainProofHash) && !onChainVerified;
 
   return (
     <NetworkGuard>
