@@ -1,16 +1,59 @@
-"use client";
+﻿"use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useWallet } from "@/hooks/useWallet";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
-import { supabaseInsert } from "@/lib/storage/supabase-rest";
+
+type RuleType = "required" | "minLength" | "maxLength" | "pattern" | "minTime" | "attentionCheck";
+type RuleField = "answer" | "completionTimeSeconds" | "attentionCheck";
 
 type QualityRule = {
-  type: "required" | "minLength" | "maxLength" | "pattern" | "minTime" | "attentionCheck";
-  field: string;
+  type: RuleType;
+  field: RuleField;
   value: string;
   message: string;
 };
+
+type RulePreset = {
+  id: "lenient" | "balanced" | "strict";
+  name: string;
+  description: string;
+  rules: QualityRule[];
+};
+
+const PRESETS: RulePreset[] = [
+  {
+    id: "lenient",
+    name: "Lenient",
+    description: "Fast participation with basic protection against empty answers.",
+    rules: [
+      { type: "required", field: "answer", value: "true", message: "Answer is required." },
+      { type: "minTime", field: "completionTimeSeconds", value: "5", message: "Please spend at least 5 seconds." },
+    ],
+  },
+  {
+    id: "balanced",
+    name: "Balanced",
+    description: "Recommended default. Better quality checks with minimal friction.",
+    rules: [
+      { type: "required", field: "answer", value: "true", message: "Answer is required." },
+      { type: "minLength", field: "answer", value: "20", message: "Please provide a more complete answer." },
+      { type: "minTime", field: "completionTimeSeconds", value: "10", message: "Please spend at least 10 seconds." },
+      { type: "attentionCheck", field: "attentionCheck", value: "true", message: "Attention check failed." },
+    ],
+  },
+  {
+    id: "strict",
+    name: "Strict",
+    description: "Highest filtering for data quality and anti-rush responses.",
+    rules: [
+      { type: "required", field: "answer", value: "true", message: "Answer is required." },
+      { type: "minLength", field: "answer", value: "40", message: "Please provide a detailed answer." },
+      { type: "minTime", field: "completionTimeSeconds", value: "20", message: "Please spend at least 20 seconds." },
+      { type: "attentionCheck", field: "attentionCheck", value: "true", message: "Attention check failed." },
+    ],
+  },
+];
 
 type QualityRulesFormProps = {
   surveyId: number | bigint;
@@ -22,46 +65,15 @@ export function QualityRulesForm({ surveyId, onSuccess, onCancel }: QualityRules
   const { account } = useWallet();
   const { isAuthenticated } = useWalletAuth();
 
-  const [rules, setRules] = useState<QualityRule[]>([
-    {
-      type: "required",
-      field: "answer",
-      value: "true",
-      message: "Answer is required.",
-    },
-    {
-      type: "minTime",
-      field: "completionTime",
-      value: "10",
-      message: "Please spend at least 10 seconds on this survey.",
-    },
-  ]);
-
+  const [selectedPresetId, setSelectedPresetId] = useState<RulePreset["id"]>("balanced");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  function addRule() {
-    const newRule: QualityRule = {
-      type: "required",
-      field: "answer",
-      value: "true",
-      message: "",
-    };
-    setRules([...rules, newRule]);
-  }
-
-  function removeRule(index: number) {
-    if (rules.length > 1) {
-      setRules(rules.filter((_, i) => i !== index));
-    }
-  }
-
-  function updateRule(index: number, field: keyof QualityRule, value: string) {
-    const newRules = [...rules];
-    newRules[index] = { ...newRules[index], [field]: value };
-    setRules(newRules);
-  }
+  const selectedPreset = useMemo(
+    () => PRESETS.find((preset) => preset.id === selectedPresetId) ?? PRESETS[1],
+    [selectedPresetId],
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -79,198 +91,108 @@ export function QualityRulesForm({ surveyId, onSuccess, onCancel }: QualityRules
     }
 
     const surveyIdNum = Number(surveyId);
-    if (isNaN(surveyIdNum) || surveyIdNum <= 0) {
+    if (!Number.isInteger(surveyIdNum) || surveyIdNum <= 0) {
       setError("Invalid survey ID.");
-      return;
-    }
-
-    const validRules = rules.filter((rule) => rule.message.trim());
-    if (validRules.length === 0) {
-      setError("At least one quality rule with a message is required.");
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      const rulesJson = validRules.map((rule) => ({
-        type: rule.type,
-        field: rule.field,
-        value: rule.value,
-        message: rule.message,
-      }));
+      const response = await fetch(`/api/surveys/${surveyIdNum}/quality-rules`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rules: selectedPreset.rules,
+          version: 1
+        })
+      });
 
-      const rulesData = {
-        survey_id: surveyIdNum,
-        rules_json: rulesJson,
-        version: 1,
-      };
-
-      const result = await supabaseInsert("survey_quality_rules", rulesData);
-
-      if (result) {
-        setSuccess("Quality rules saved successfully!");
-        onSuccess?.(validRules);
-      } else {
-        setError("Failed to save quality rules. Please try again.");
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        setError(payload.error || "Failed to save quality rules preset. Please try again.");
+        return;
       }
-    } catch (err: any) {
+
+      setSuccess(`${selectedPreset.name} preset saved successfully.`);
+      onSuccess?.(selectedPreset.rules);
+    } catch (err: unknown) {
       console.error("Error saving quality rules:", err);
-      setError("Failed to save quality rules: " + (err?.message || "Unknown error"));
+      setError("Failed to save quality rules preset.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
   if (!account) {
-    return (
-      <div style={{ padding: "1rem", border: "1px solid #ccc", borderRadius: "8px" }}>
-        <p>Please connect your wallet to configure quality rules.</p>
-      </div>
-    );
+    return <div className="surface text-sm">Please connect your wallet to configure quality rules.</div>;
   }
 
   if (!isAuthenticated) {
-    return (
-      <div style={{ padding: "1rem", border: "1px solid #ccc", borderRadius: "8px" }}>
-        <p>Please sign in with your wallet to configure quality rules.</p>
-      </div>
-    );
+    return <div className="surface text-sm">Please sign in with your wallet to configure quality rules.</div>;
   }
 
   return (
-    <div style={{ maxWidth: "600px", margin: "0 auto" }}>
-      <h3>Configure Quality Rules for Survey</h3>
-      <p style={{ fontSize: "0.875rem", color: "#666", marginBottom: "1rem" }}>
-        Quality rules are evaluated off-chain and determine whether a response qualifies for rewards.
+    <div className="max-w-xl mx-auto">
+      <h3 className="text-xl font-semibold mb-2">Configure Quality Rules</h3>
+      <p className="text-sm text-muted mb-4">
+        Pick one preset profile. The system applies proven defaults automatically.
       </p>
 
       {error && (
-        <div style={{ padding: "1rem", backgroundColor: "#fee", border: "1px solid #fcc", borderRadius: "4px", marginBottom: "1rem" }}>
+        <div className="surface text-sm mb-4" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>
           {error}
         </div>
       )}
 
       {success && (
-        <div style={{ padding: "1rem", backgroundColor: "#efe", border: "1px solid #cfc", borderRadius: "4px", marginBottom: "1rem" }}>
+        <div className="surface text-sm mb-4" style={{ borderColor: "var(--success)", color: "#065f46" }}>
           {success}
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        {rules.map((rule, index) => (
-          <div key={index} style={{ border: "1px solid #ddd", borderRadius: "4px", padding: "1rem", marginBottom: "1rem" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              <div>
-                <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "0.25rem" }}>Rule Type</label>
-                <select
-                  value={rule.type}
-                  onChange={(e) => updateRule(index, "type", e.target.value as QualityRule["type"])}
-                  disabled={isSubmitting}
-                  style={{ width: "100%", padding: "0.5rem", fontSize: "0.875rem" }}
-                >
-                  <option value="required">Required Field</option>
-                  <option value="minLength">Minimum Length</option>
-                  <option value="maxLength">Maximum Length</option>
-                  <option value="pattern">Pattern Match</option>
-                  <option value="minTime">Minimum Time (seconds)</option>
-                  <option value="attentionCheck">Attention Check</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "0.25rem" }}>Field</label>
-                <input
-                  type="text"
-                  value={rule.field}
-                  onChange={(e) => updateRule(index, "field", e.target.value)}
-                  disabled={isSubmitting}
-                  style={{ width: "100%", padding: "0.5rem", fontSize: "0.875rem" }}
-                  placeholder="e.g., answer, completionTime"
-                />
-              </div>
-            </div>
-
-            <div style={{ marginBottom: "0.5rem" }}>
-              <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "0.25rem" }}>Expected Value</label>
-              <input
-                type="text"
-                value={rule.value}
-                onChange={(e) => updateRule(index, "value", e.target.value)}
-                disabled={isSubmitting}
-                style={{ width: "100%", padding: "0.5rem", fontSize: "0.875rem" }}
-                placeholder={rule.type === "minLength" ? "e.g., 10" : "e.g., true"}
-              />
-            </div>
-
-            <div style={{ marginBottom: "0.5rem" }}>
-              <label style={{ display: "block", fontSize: "0.75rem", marginBottom: "0.25rem" }}>Validation Message</label>
-              <input
-                type="text"
-                value={rule.message}
-                onChange={(e) => updateRule(index, "message", e.target.value)}
-                disabled={isSubmitting}
-                style={{ width: "100%", padding: "0.5rem", fontSize: "0.875rem" }}
-                placeholder="Message shown when validation fails"
-              />
-            </div>
-
-            {rules.length > 1 && (
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div className="grid gap-3">
+          {PRESETS.map((preset) => {
+            const selected = preset.id === selectedPresetId;
+            return (
               <button
+                key={preset.id}
                 type="button"
-                onClick={() => removeRule(index)}
+                onClick={() => setSelectedPresetId(preset.id)}
                 disabled={isSubmitting}
-                style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem", backgroundColor: "#fee", border: "1px solid #fcc", borderRadius: "4px" }}
+                className="surface"
+                style={{
+                  textAlign: "left",
+                  borderColor: selected ? "var(--border-focus)" : "var(--border)",
+                  boxShadow: selected ? "0 0 0 1px var(--border-focus)" : "none",
+                  cursor: "pointer",
+                }}
               >
-                Remove Rule
+                <p className="text-base font-semibold mb-1">{preset.name}</p>
+                <p className="text-sm text-muted">{preset.description}</p>
               </button>
-            )}
-          </div>
-        ))}
-
-        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
-          <button
-            type="button"
-            onClick={addRule}
-            disabled={isSubmitting}
-            style={{ padding: "0.5rem 1rem", fontSize: "0.875rem", backgroundColor: "#e0e0e0", border: "1px solid #ccc", borderRadius: "4px" }}
-          >
-            + Add Rule
-          </button>
+            );
+          })}
         </div>
 
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            style={{
-              flex: 1,
-              padding: "0.75rem",
-              fontSize: "0.875rem",
-              fontWeight: "bold",
-              backgroundColor: isSubmitting ? "#ccc" : "#28a745",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: isSubmitting ? "not-allowed" : "pointer",
-            }}
-          >
-            {isSubmitting ? "Saving..." : "Save Quality Rules"}
+        <div className="surface">
+          <p className="text-sm font-semibold mb-2">Selected preset rules</p>
+          <div className="flex flex-col gap-2">
+            {selectedPreset.rules.map((rule, idx) => (
+              <p key={`${rule.type}-${rule.field}-${idx}`} className="text-sm text-muted">
+                {rule.type} • {rule.field} = {rule.value}
+              </p>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button type="submit" disabled={isSubmitting} className="btn btn-primary" style={{ flex: 1 }}>
+            {isSubmitting ? "Saving..." : `Apply ${selectedPreset.name} Preset`}
           </button>
           {onCancel && (
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={isSubmitting}
-              style={{
-                padding: "0.75rem",
-                fontSize: "0.875rem",
-                backgroundColor: "#6c757d",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-              }}
-            >
+            <button type="button" onClick={onCancel} disabled={isSubmitting} className="btn btn-secondary">
               Cancel
             </button>
           )}
@@ -279,3 +201,4 @@ export function QualityRulesForm({ surveyId, onSuccess, onCancel }: QualityRules
     </div>
   );
 }
+

@@ -15,6 +15,7 @@ export type SurveyContractState = {
   // Reads
   isVerified: (address: string) => Promise<boolean>;
   hasAdminRole: (address: string) => Promise<boolean>;
+  hasCreatorRole: (address: string) => Promise<boolean>;
   claimableRewards: (address: string) => Promise<bigint>;
   totalEarned: (address: string) => Promise<bigint>;
   getSurveySummary: (surveyId: bigint | number) => Promise<SurveySummary>;
@@ -84,6 +85,15 @@ export function useSurveyContract(
       if (!readContract) throw new Error("Contract not ready.");
       const adminRole = (await readContract.ADMIN_ROLE()) as string;
       return readContract.hasRole(adminRole, address) as Promise<boolean>;
+    },
+    [readContract]
+  );
+
+  const hasCreatorRole = useCallback(
+    async (address: string): Promise<boolean> => {
+      if (!readContract) throw new Error("Contract not ready.");
+      const creatorRole = (await readContract.CREATOR_ROLE()) as string;
+      return readContract.hasRole(creatorRole, address) as Promise<boolean>;
     },
     [readContract]
   );
@@ -196,6 +206,7 @@ export function useSurveyContract(
     contractAddress,
     isVerified,
     hasAdminRole,
+    hasCreatorRole,
     claimableRewards,
     totalEarned,
     getSurveySummary,

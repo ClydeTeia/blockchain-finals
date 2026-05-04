@@ -150,6 +150,18 @@ create table if not exists survey_quality_rules (
 create unique index if not exists survey_quality_rules_survey_unique
 	on survey_quality_rules (survey_id);
 
+create table if not exists survey_question_sets (
+	id uuid primary key default gen_random_uuid(),
+	survey_id bigint not null,
+	questions_json jsonb not null default '[]'::jsonb,
+	version integer not null default 1,
+	created_at timestamptz not null default now(),
+	updated_at timestamptz not null default now()
+);
+
+create unique index if not exists survey_question_sets_survey_unique
+	on survey_question_sets (survey_id);
+
 create table if not exists audit_logs (
 	id uuid primary key default gen_random_uuid(),
 	actor_wallet text null,

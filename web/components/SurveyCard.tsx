@@ -18,6 +18,13 @@ type SurveyCardProps = {
     active: boolean;
     unusedRewardsWithdrawn: boolean;
     options: string[];
+    questions?: Array<{
+      id: string;
+      prompt: string;
+      type: "multiple_choice" | "text";
+      required: boolean;
+      options?: string[];
+    }>;
   };
   onAnswerClick?: (surveyId: number) => void;
 };
@@ -90,7 +97,12 @@ export function SurveyCard({ survey, onAnswerClick }: SurveyCardProps) {
 
       <div className="surface">
         <h4 className="text-xs font-semibold text-muted mb-2 uppercase tracking-wide">Question</h4>
-        <p className="text-base font-medium">{survey.question}</p>
+        <p className="text-base font-medium">
+          {survey.questions?.[0]?.prompt ?? survey.question}
+        </p>
+        {!!survey.questions?.length && survey.questions.length > 1 && (
+          <p className="text-xs text-muted mt-2">{survey.questions.length} questions total</p>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-4">

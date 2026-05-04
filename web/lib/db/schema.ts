@@ -80,6 +80,15 @@ export const surveyQualityRules = pgTable("survey_quality_rules", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
 });
 
+export const surveyQuestionSets = pgTable("survey_question_sets", {
+  id: uuid("id").primaryKey(),
+  surveyId: bigint("survey_id", { mode: "number" }).notNull(),
+  questionsJson: jsonb("questions_json").notNull(),
+  version: integer("version").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
+});
+
 export const auditLogs = pgTable("audit_logs", {
   id: uuid("id").primaryKey(),
   actorWallet: text("actor_wallet"),

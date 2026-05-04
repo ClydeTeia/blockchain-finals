@@ -1,6 +1,21 @@
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
 import { Contract, JsonRpcProvider } from "ethers";
 import { SURVEY_REWARD_ABI, getContractAddress } from "@/lib/blockchain/contract";
+import { getDb, hasDatabaseConfig } from "@/lib/db/client";
+import { surveyQuestionSets } from "@/lib/db/schema";
+import { sanitizeSurveyQuestions, type SurveyQuestion } from "@/lib/surveys/questions";
+
+function isMissingQuestionSetTableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const cause = "cause" in error ? (error as { cause?: unknown }).cause : undefined;
+  if (!cause || typeof cause !== "object") {
+    return false;
+  }
+  return "code" in cause && (cause as { code?: unknown }).code === "42P01";
+}
 
 function getRpcUrl(): string | null {
   return process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL ?? process.env.SEPOLIA_RPC_URL ?? null;
@@ -35,6 +50,40 @@ export async function GET(
       return NextResponse.json({ error: "Survey not found." }, { status: 404 });
     }
 
+    let questions: SurveyQuestion[] = [
+      {
+        id: "q_1",
+        prompt: survey.question,
+        type: "text",
+        required: true
+      }
+    ];
+
+    if (hasDatabaseConfig()) {
+      const db = getDb();
+      if (db) {
+        try {
+          const row = (
+            await db
+              .select({ questionsJson: surveyQuestionSets.questionsJson })
+              .from(surveyQuestionSets)
+              .where(eq(surveyQuestionSets.surveyId, surveyId))
+              .limit(1)
+          )[0];
+          const parsed = sanitizeSurveyQuestions(row?.questionsJson);
+          if (parsed.length > 0) {
+            questions = parsed;
+          }
+        } catch (error) {
+          if (isMissingQuestionSetTableError(error)) {
+            console.warn(`Question set table unavailable for survey ${surveyId}; falling back to on-chain question only.`);
+          } else {
+            console.warn(`Failed loading question set for survey ${surveyId}; falling back to on-chain question only.`, error);
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       survey: {
         id: surveyId,
@@ -48,7 +97,8 @@ export async function GET(
         escrowRemaining: survey.escrowRemaining.toString(),
         active: survey.active,
         unusedRewardsWithdrawn: survey.unusedRewardsWithdrawn,
-        options: []
+        options: [],
+        questions
       }
     });
   } catch (error) {

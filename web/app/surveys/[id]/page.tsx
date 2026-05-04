@@ -10,7 +10,28 @@ import { useWallet } from "@/hooks/useWallet";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { useSurveyContract } from "@/hooks/useSurveyContract";
 import { useAnswerSubmission } from "@/hooks/useAnswerSubmission";
-import type { SurveySummary } from "@/lib/blockchain/contract";
+
+type SurveyDetails = {
+  id: number;
+  creator: string;
+  title: string;
+  description: string;
+  question: string;
+  rewardPerResponse: string;
+  maxResponses: string;
+  responseCount: string;
+  escrowRemaining: string;
+  active: boolean;
+  unusedRewardsWithdrawn: boolean;
+  options: string[];
+  questions: Array<{
+    id: string;
+    prompt: string;
+    type: "multiple_choice" | "text";
+    required: boolean;
+    options?: string[];
+  }>;
+};
 
 export default function SurveyAnswerPage() {
   const params = useParams();
@@ -18,9 +39,9 @@ export default function SurveyAnswerPage() {
 
   const { account, provider } = useWallet();
   const { isAuthenticated, isLoading: authLoading } = useWalletAuth();
-  const { getSurveySummary, hasSubmitted, isReady } = useSurveyContract(provider);
+  const { hasSubmitted, isReady } = useSurveyContract(provider);
 
-  const [survey, setSurvey] = useState<SurveySummary | null>(null);
+  const [survey, setSurvey] = useState<SurveyDetails | null>(null);
   const [alreadySubmitted, setAlreadySubmitted] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoadingSurvey, setIsLoadingSurvey] = useState(false);
@@ -48,16 +69,25 @@ export default function SurveyAnswerPage() {
     setIsLoadingSurvey(true);
     setLoadError(null);
 
-    Promise.all([getSurveySummary(BigInt(surveyId)), hasSubmitted(BigInt(surveyId), account)])
+    Promise.all([
+      fetch(`/api/surveys/${surveyId}`).then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Failed to load survey details.");
+        }
+        const data = (await response.json()) as { survey: SurveyDetails };
+        return data.survey;
+      }),
+      hasSubmitted(BigInt(surveyId), account)
+    ])
       .then(([s, submitted]) => {
-        setSurvey(s);
+        setSurvey(s as SurveyDetails);
         setAlreadySubmitted(submitted);
       })
       .catch((e: unknown) => {
         setLoadError(e instanceof Error ? e.message : "Failed to load survey.");
       })
       .finally(() => setIsLoadingSurvey(false));
-  }, [isReady, account, surveyId, getSurveySummary, hasSubmitted]);
+  }, [isReady, account, surveyId, hasSubmitted]);
 
   // Auto-start attempt once survey loads and user hasn't already answered
   useEffect(() => {

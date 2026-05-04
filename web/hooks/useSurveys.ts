@@ -15,6 +15,13 @@ export type SurveySummary = {
   active: boolean;
   unusedRewardsWithdrawn: boolean;
   options: string[];
+  questions?: Array<{
+    id: string;
+    prompt: string;
+    type: "multiple_choice" | "text";
+    required: boolean;
+    options?: string[];
+  }>;
 };
 
 type UseSurveysResult = {
@@ -53,4 +60,3 @@ export function useSurveys(): UseSurveysResult {
 
   return { surveys, isLoading, error, refetch };
 }
-

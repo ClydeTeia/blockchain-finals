@@ -1,5 +1,6 @@
 export const SURVEY_REWARD_ABI = [
   "function ADMIN_ROLE() view returns (bytes32)",
+  "function CREATOR_ROLE() view returns (bytes32)",
   "function hasRole(bytes32 role, address account) view returns (bool)",
   "function surveyCount() view returns (uint256)",
   "function isVerified(address wallet) view returns (bool)",

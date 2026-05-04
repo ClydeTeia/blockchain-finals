@@ -1,86 +1,146 @@
-"use client";
+﻿"use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useWallet } from "@/hooks/useWallet";
 import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { useSurveyContract } from "@/hooks/useSurveyContract";
 import { ethers } from "ethers";
 
-type QualityRule = {
+type BuilderQuestion = {
   id: string;
-  type: "required" | "minLength" | "maxLength" | "pattern";
-  field: string;
-  value: string;
-  message: string;
+  prompt: string;
+  type: "multiple_choice" | "text";
+  required: boolean;
+  options: string[];
 };
+
+function newQuestion(index: number): BuilderQuestion {
+  return {
+    id: `q_${index + 1}`,
+    prompt: "",
+    type: "multiple_choice",
+    required: true,
+    options: ["", ""],
+  };
+}
 
 export function CreateSurveyForm() {
   const { account, provider } = useWallet();
   const { isAuthenticated, isAdmin, isCreator } = useWalletAuth();
   const contract = useSurveyContract(provider);
+  const [hasOnChainCreateRole, setHasOnChainCreateRole] = useState<boolean | null>(null);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [question, setQuestion] = useState("");
-  const [options, setOptions] = useState<string[]>(["", ""]);
-  const [rewardPerResponse, setRewardPerResponse] = useState("");
+  const [questions, setQuestions] = useState<BuilderQuestion[]>([newQuestion(0)]);
+  const [totalRewardPool, setTotalRewardPool] = useState("");
   const [maxResponses, setMaxResponses] = useState("");
-  const [qualityRules, setQualityRules] = useState<QualityRule[]>([]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Calculate total deposit
-  const depositWei = (() => {
+  const totalRewardPoolWei = (() => {
     try {
-      const reward = rewardPerResponse ? ethers.parseEther(rewardPerResponse) : 0n;
-      const max = maxResponses ? BigInt(maxResponses) : 0n;
-      return reward * max;
+      return totalRewardPool ? ethers.parseEther(totalRewardPool) : 0n;
     } catch {
       return 0n;
     }
   })();
 
-  const depositEth = depositWei > 0n ? ethers.formatEther(depositWei) : "0";
-
-  function addOption() {
-    setOptions([...options, ""]);
-  }
-
-  function removeOption(index: number) {
-    if (options.length > 2) {
-      setOptions(options.filter((_, i) => i !== index));
+  const maxResponsesWei = (() => {
+    try {
+      return maxResponses ? BigInt(maxResponses) : 0n;
+    } catch {
+      return 0n;
     }
-  }
+  })();
 
-  function updateOption(index: number, value: string) {
-    const newOptions = [...options];
-    newOptions[index] = value;
-    setOptions(newOptions);
-  }
+  const isEvenlyDivisible = maxResponsesWei > 0n && totalRewardPoolWei > 0n
+    ? totalRewardPoolWei % maxResponsesWei === 0n
+    : false;
+  const computedRewardPerResponseWei =
+    isEvenlyDivisible && maxResponsesWei > 0n ? totalRewardPoolWei / maxResponsesWei : 0n;
+  const computedRewardPerResponseEth =
+    computedRewardPerResponseWei > 0n ? ethers.formatEther(computedRewardPerResponseWei) : "0";
+  const depositEth = totalRewardPoolWei > 0n ? ethers.formatEther(totalRewardPoolWei) : "0";
 
-  function addQualityRule() {
-    const newRule: QualityRule = {
-      id: Date.now().toString(),
-      type: "required",
-      field: "answer",
-      value: "",
-      message: "",
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOnChainRole() {
+      if (!account || !contract.isReady) {
+        setHasOnChainCreateRole(null);
+        return;
+      }
+      try {
+        const [adminRole, creatorRole] = await Promise.all([
+          contract.hasAdminRole(account),
+          contract.hasCreatorRole(account)
+        ]);
+        if (!cancelled) {
+          setHasOnChainCreateRole(adminRole || creatorRole);
+        }
+      } catch {
+        if (!cancelled) {
+          setHasOnChainCreateRole(null);
+        }
+      }
+    }
+
+    void loadOnChainRole();
+    return () => {
+      cancelled = true;
     };
-    setQualityRules([...qualityRules, newRule]);
+  }, [account, contract]);
+
+  function addQuestion() {
+    setQuestions((prev) => [...prev, newQuestion(prev.length)]);
   }
 
-  function removeQualityRule(id: string) {
-    setQualityRules(qualityRules.filter((rule) => rule.id !== id));
+  function removeQuestion(index: number) {
+    if (questions.length <= 1) {
+      return;
+    }
+    setQuestions((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function updateQualityRule(id: string, field: keyof QualityRule, value: string) {
-    setQualityRules(
-      qualityRules.map((rule) =>
-        rule.id === id ? { ...rule, [field]: value } : rule
-      )
-    );
+  function updateQuestion(index: number, patch: Partial<BuilderQuestion>) {
+    setQuestions((prev) => prev.map((question, i) => {
+      if (i !== index) return question;
+      const next = { ...question, ...patch };
+      if (patch.type === "text") {
+        next.options = [];
+      }
+      if (patch.type === "multiple_choice" && next.options.length < 2) {
+        next.options = ["", ""];
+      }
+      return next;
+    }));
+  }
+
+  function addOption(questionIndex: number) {
+    setQuestions((prev) => prev.map((question, i) => {
+      if (i !== questionIndex) return question;
+      return { ...question, options: [...question.options, ""] };
+    }));
+  }
+
+  function removeOption(questionIndex: number, optionIndex: number) {
+    setQuestions((prev) => prev.map((question, i) => {
+      if (i !== questionIndex || question.options.length <= 2) return question;
+      return { ...question, options: question.options.filter((_, idx) => idx !== optionIndex) };
+    }));
+  }
+
+  function updateOption(questionIndex: number, optionIndex: number, value: string) {
+    setQuestions((prev) => prev.map((question, i) => {
+      if (i !== questionIndex) return question;
+      return {
+        ...question,
+        options: question.options.map((option, idx) => (idx === optionIndex ? value : option)),
+      };
+    }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -103,6 +163,11 @@ export function CreateSurveyForm() {
       return;
     }
 
+    if (hasOnChainCreateRole === false) {
+      setError("This wallet is authenticated but missing on-chain creator/admin role.");
+      return;
+    }
+
     if (!contract.isReady) {
       setError("Contract not ready. Please check your connection.");
       return;
@@ -113,31 +178,20 @@ export function CreateSurveyForm() {
       return;
     }
 
-    if (!question.trim()) {
-      setError("Survey question is required.");
+    if (!totalRewardPool || !maxResponses) {
+      setError("Total reward pool and max responses are required.");
       return;
     }
 
-    const validOptions = options.map((o) => o.trim()).filter(Boolean);
-    if (validOptions.length < 2) {
-      setError("At least 2 options are required.");
-      return;
-    }
-
-    if (!rewardPerResponse || !maxResponses) {
-      setError("Reward per response and max responses are required.");
-      return;
-    }
-
-    let rewardWei: bigint;
+    let rewardPoolWei: bigint;
     try {
-      rewardWei = ethers.parseEther(rewardPerResponse);
-      if (rewardWei <= 0n) {
-        setError("Reward per response must be greater than 0.");
+      rewardPoolWei = ethers.parseEther(totalRewardPool);
+      if (rewardPoolWei <= 0n) {
+        setError("Total reward pool must be greater than 0.");
         return;
       }
     } catch {
-      setError("Invalid reward amount.");
+      setError("Invalid total reward pool.");
       return;
     }
 
@@ -153,296 +207,271 @@ export function CreateSurveyForm() {
       return;
     }
 
-    if (depositWei <= 0n) {
-      setError("Deposit calculation error.");
+    if (rewardPoolWei % maxResp !== 0n) {
+      setError("Total reward pool must divide evenly by max responses.");
+      return;
+    }
+
+    const rewardWei = rewardPoolWei / maxResp;
+    if (rewardWei <= 0n) {
+      setError("Computed reward per response must be greater than 0.");
+      return;
+    }
+
+    const cleanedQuestions = questions
+      .map((question, index) => {
+        const prompt = question.prompt.trim();
+        const options = question.type === "multiple_choice"
+          ? question.options.map((option) => option.trim()).filter(Boolean)
+          : [];
+        return {
+          id: `q_${index + 1}`,
+          prompt,
+          type: question.type,
+          required: question.required,
+          options,
+        };
+      })
+      .filter((question) => question.prompt);
+
+    if (cleanedQuestions.length === 0) {
+      setError("At least one question is required.");
+      return;
+    }
+
+    const primaryQuestion = cleanedQuestions[0];
+    if (primaryQuestion.type !== "multiple_choice" || primaryQuestion.options.length < 2) {
+      setError("Question 1 must be multiple choice with at least 2 options.");
       return;
     }
 
     setIsSubmitting(true);
 
-      try {
-        // Create survey on-chain
-        const tx = await contract.createSurvey(
-          title.trim(),
-          description.trim(),
-          question.trim(),
-          validOptions,
-          rewardWei,
-          maxResp,
-          depositWei
-        );
+    try {
+      const tx = await contract.createSurvey(
+        title.trim(),
+        description.trim(),
+        primaryQuestion.prompt,
+        primaryQuestion.options,
+        rewardWei,
+        maxResp,
+        rewardPoolWei,
+      );
 
-        setSuccess(`Survey created! Transaction: ${tx.hash}`);
-        
-        // Reset form
-        setTitle("");
-        setDescription("");
-        setQuestion("");
-        setOptions(["", ""]);
-        setRewardPerResponse("");
-        setMaxResponses("");
-        setQualityRules([]);
-
-        // Wait for transaction to be mined
-        await tx.wait?.();
-        setSuccess(`Survey created successfully! Survey ID will be available shortly.`);
-      } catch (err: any) {
-        console.error("Error creating survey:", err);
-        let message = "Failed to create survey.";
-        if (err?.message?.includes("Incorrect escrow amount")) {
-          message = "Incorrect deposit amount.";
-        } else if (err?.message?.includes("Creator or admin required")) {
-          message = "Only creators or admins can create surveys.";
-        } else if (err?.message?.includes("rewardPerResponse must be > 0")) {
-          message = "Reward per response must be greater than 0.";
-        } else if (err?.message?.includes("maxResponses must be > 0")) {
-          message = "Max responses must be greater than 0.";
-        } else if (err?.rejection) {
-          message = "Transaction rejected.";
+      const receipt = await tx.wait?.();
+      let createdSurveyId: bigint | null = null;
+      if (receipt?.logs) {
+        for (const log of receipt.logs) {
+          if ("fragment" in log && log.fragment?.name === "SurveyCreated") {
+            createdSurveyId = BigInt(log.args?.surveyId ?? log.args?.[0]);
+            break;
+          }
         }
-        setError(message);
-      } finally {
-        setIsSubmitting(false);
       }
+
+      if (!createdSurveyId) {
+        throw new Error("Survey created on-chain but surveyId could not be resolved.");
+      }
+
+      let metadataWarning: string | null = null;
+      try {
+        const metadataResponse = await fetch(`/api/surveys/${createdSurveyId.toString()}/questions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ questions: cleanedQuestions }),
+        });
+
+        if (!metadataResponse.ok) {
+          const payload = (await metadataResponse.json().catch(() => ({}))) as { error?: string };
+          metadataWarning = payload.error || "Failed to save question set.";
+        }
+      } catch {
+        metadataWarning = "Failed to save question set.";
+      }
+
+      setSuccess(
+        metadataWarning
+          ? `Survey created on-chain (ID: ${createdSurveyId.toString()}), but ${metadataWarning}`
+          : `Survey created successfully. Survey ID: ${createdSurveyId.toString()}.`
+      );
+      setTitle("");
+      setDescription("");
+      setQuestions([newQuestion(0)]);
+      setTotalRewardPool("");
+      setMaxResponses("");
+    } catch (err: unknown) {
+      console.error("Error creating survey:", err);
+      const message = err instanceof Error ? err.message : "Failed to create survey.";
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (!account) {
-    return (
-      <div style={{ padding: "1rem", border: "1px solid #ccc", borderRadius: "8px" }}>
-        <p>Please connect your wallet to create a survey.</p>
-      </div>
-    );
+    return <div className="surface text-sm">Please connect your wallet to create a survey.</div>;
   }
 
   if (!isAuthenticated) {
-    return (
-      <div style={{ padding: "1rem", border: "1px solid #ccc", borderRadius: "8px" }}>
-        <p>Please sign in with your wallet to create a survey.</p>
-      </div>
-    );
+    return <div className="surface text-sm">Please sign in with your wallet to create a survey.</div>;
   }
 
   if (!(isCreator || isAdmin)) {
-    return (
-      <div style={{ padding: "1rem", border: "1px solid #ccc", borderRadius: "8px" }}>
-        <p>This wallet is not authorized to create surveys.</p>
-      </div>
-    );
+    return <div className="surface text-sm">This wallet is not authorized to create surveys.</div>;
   }
 
   return (
-    <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-      <h2>Create Survey</h2>
-      
+    <div className="flex flex-col gap-4">
       {error && (
-        <div style={{ padding: "1rem", backgroundColor: "#fee", border: "1px solid #fcc", borderRadius: "4px", marginBottom: "1rem" }}>
+        <div className="surface text-sm" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>
           {error}
         </div>
       )}
-      
+
       {success && (
-        <div style={{ padding: "1rem", backgroundColor: "#efe", border: "1px solid #cfc", borderRadius: "4px", marginBottom: "1rem" }}>
+        <div className="surface text-sm" style={{ borderColor: "var(--success)", color: "#065f46" }}>
           {success}
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: "1rem" }}>
-          <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "bold" }}>
-            Survey Title *
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            disabled={isSubmitting}
-            style={{ width: "100%", padding: "0.5rem", fontSize: "1rem" }}
-            placeholder="Enter survey title"
-          />
-        </div>
-
-        <div style={{ marginBottom: "1rem" }}>
-          <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "bold" }}>
-            Description
-          </label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            disabled={isSubmitting}
-            style={{ width: "100%", padding: "0.5rem", fontSize: "1rem", minHeight: "80px" }}
-            placeholder="Enter survey description (optional)"
-          />
-        </div>
-
-        <div style={{ marginBottom: "1rem" }}>
-          <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "bold" }}>
-            Question *
-          </label>
-          <input
-            type="text"
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            disabled={isSubmitting}
-            style={{ width: "100%", padding: "0.5rem", fontSize: "1rem" }}
-            placeholder="Enter survey question"
-          />
-        </div>
-
-        <div style={{ marginBottom: "1rem" }}>
-          <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "bold" }}>
-            Answer Options *
-          </label>
-          {options.map((option, index) => (
-            <div key={index} style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              <input
-                type="text"
-                value={option}
-                onChange={(e) => updateOption(index, e.target.value)}
-                disabled={isSubmitting}
-                style={{ flex: 1, padding: "0.5rem", fontSize: "1rem" }}
-                placeholder={`Option ${index + 1}`}
-              />
-              {options.length > 2 && (
-                <button
-                  type="button"
-                  onClick={() => removeOption(index)}
-                  disabled={isSubmitting}
-                  style={{ padding: "0.5rem 1rem", backgroundColor: "#fee", border: "1px solid #fcc", borderRadius: "4px" }}
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={addOption}
-            disabled={isSubmitting}
-            style={{ padding: "0.5rem 1rem", backgroundColor: "#f0f0f0", border: "1px solid #ccc", borderRadius: "4px", marginTop: "0.5rem" }}
-          >
-            + Add Option
-          </button>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1rem" }}>
-          <div>
-            <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "bold" }}>
-              Reward per Response (ETH) *
-            </label>
-            <input
-              type="number"
-              step="0.0001"
-              min="0.0001"
-              value={rewardPerResponse}
-              onChange={(e) => setRewardPerResponse(e.target.value)}
-              disabled={isSubmitting}
-              style={{ width: "100%", padding: "0.5rem", fontSize: "1rem" }}
-              placeholder="0.01"
-            />
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        {hasOnChainCreateRole === false && (
+          <div className="surface text-sm" style={{ borderColor: "var(--danger)", color: "var(--danger)" }}>
+            Wallet is signed in but does not have on-chain creator/admin role. Ask an admin wallet to grant creator role first.
           </div>
-          <div>
-            <label style={{ display: "block", marginBottom: "0.5rem", fontWeight: "bold" }}>
-              Max Responses *
-            </label>
-            <input
-              type="number"
-              min="1"
-              value={maxResponses}
-              onChange={(e) => setMaxResponses(e.target.value)}
-              disabled={isSubmitting}
-              style={{ width: "100%", padding: "0.5rem", fontSize: "1rem" }}
-              placeholder="100"
-            />
-          </div>
+        )}
+
+        <div>
+          <label className="form-label">Survey Title *</label>
+          <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} disabled={isSubmitting} className="form-input" placeholder="Enter survey title" />
         </div>
 
-        <div style={{ marginBottom: "1rem", padding: "1rem", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>
-          <h4 style={{ margin: "0 0 0.5rem 0", fontSize: "1rem" }}>Deposit Preview</h4>
-          <p style={{ margin: 0 }}>
-            Total ETH Deposit: <strong>{depositEth} ETH</strong>
-          </p>
-          <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.875rem", color: "#666" }}>
-            ({rewardPerResponse || 0} ETH × {maxResponses || 0} responses)
-          </p>
+        <div>
+          <label className="form-label">Description</label>
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} disabled={isSubmitting} className="form-input" style={{ minHeight: "84px" }} placeholder="Enter survey description (optional)" />
         </div>
 
-        <div style={{ marginBottom: "1rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-            <label style={{ fontWeight: "bold" }}>Quality Rules</label>
-            <button
-              type="button"
-              onClick={addQualityRule}
-              disabled={isSubmitting}
-              style={{ padding: "0.25rem 0.75rem", fontSize: "0.875rem", backgroundColor: "#e0e0e0", border: "1px solid #ccc", borderRadius: "4px" }}
-            >
-              + Add Rule
+        <div className="surface">
+          <div className="flex justify-between items-center mb-2">
+            <label className="form-label" style={{ marginBottom: 0 }}>Questions *</label>
+            <button type="button" onClick={addQuestion} disabled={isSubmitting} className="btn btn-secondary text-sm">
+              Add Question
             </button>
           </div>
-          <p style={{ margin: "0 0 1rem 0", fontSize: "0.875rem", color: "#666" }}>
-            Quality rules help validate responses. Rules are stored separately and do not affect on-chain data.
-          </p>
-          {qualityRules.map((rule) => (
-            <div key={rule.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: "0.5rem", marginBottom: "0.5rem" }}>
-              <select
-                value={rule.type}
-                onChange={(e) => updateQualityRule(rule.id, "type", e.target.value)}
-                disabled={isSubmitting}
-                style={{ padding: "0.5rem", fontSize: "0.875rem" }}
-              >
-                <option value="required">Required</option>
-                <option value="minLength">Min Length</option>
-                <option value="maxLength">Max Length</option>
-                <option value="pattern">Pattern</option>
-              </select>
-              <input
-                type="text"
-                value={rule.field}
-                onChange={(e) => updateQualityRule(rule.id, "field", e.target.value)}
-                disabled={isSubmitting}
-                style={{ padding: "0.5rem", fontSize: "0.875rem" }}
-                placeholder="Field"
-              />
-              <input
-                type="text"
-                value={rule.value}
-                onChange={(e) => updateQualityRule(rule.id, "value", e.target.value)}
-                disabled={isSubmitting}
-                style={{ padding: "0.5rem", fontSize: "0.875rem" }}
-                placeholder="Value"
-              />
-              <button
-                type="button"
-                onClick={() => removeQualityRule(rule.id)}
-                disabled={isSubmitting}
-                style={{ padding: "0.5rem", backgroundColor: "#fee", border: "1px solid #fcc", borderRadius: "4px", fontSize: "0.875rem" }}
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-          {qualityRules.length === 0 && (
-            <p style={{ margin: 0, fontSize: "0.875rem", color: "#999", fontStyle: "italic" }}>
-              No quality rules defined. Surveys will accept any response that passes basic requirements.
+
+          <div className="flex flex-col gap-4">
+            {questions.map((question, questionIndex) => (
+              <div key={`${question.id}-${questionIndex}`} className="card">
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-sm font-semibold">Question {questionIndex + 1}</p>
+                  {questions.length > 1 && (
+                    <button type="button" onClick={() => removeQuestion(questionIndex)} disabled={isSubmitting} className="btn btn-ghost">
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-2">
+                  <div>
+                    <label className="form-label">Type</label>
+                    <select
+                      value={question.type}
+                      onChange={(e) => updateQuestion(questionIndex, { type: e.target.value as BuilderQuestion["type"] })}
+                      disabled={isSubmitting || questionIndex === 0}
+                      className="form-input"
+                    >
+                      <option value="multiple_choice">Multiple choice</option>
+                      {questionIndex !== 0 && <option value="text">Text</option>}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="form-label">Required</label>
+                    <select
+                      value={question.required ? "yes" : "no"}
+                      onChange={(e) => updateQuestion(questionIndex, { required: e.target.value === "yes" })}
+                      disabled={isSubmitting}
+                      className="form-input"
+                    >
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="mb-2">
+                  <label className="form-label">Prompt</label>
+                  <input
+                    type="text"
+                    value={question.prompt}
+                    onChange={(e) => updateQuestion(questionIndex, { prompt: e.target.value })}
+                    disabled={isSubmitting}
+                    className="form-input"
+                    placeholder="Enter question prompt"
+                  />
+                </div>
+
+                {question.type === "multiple_choice" && (
+                  <div>
+                    <label className="form-label">Options</label>
+                    {question.options.map((option, optionIndex) => (
+                      <div key={`${question.id}-opt-${optionIndex}`} className="flex gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={option}
+                          onChange={(e) => updateOption(questionIndex, optionIndex, e.target.value)}
+                          disabled={isSubmitting}
+                          className="form-input"
+                          placeholder={`Option ${optionIndex + 1}`}
+                        />
+                        {question.options.length > 2 && (
+                          <button type="button" onClick={() => removeOption(questionIndex, optionIndex)} disabled={isSubmitting} className="btn btn-ghost">
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => addOption(questionIndex)} disabled={isSubmitting} className="btn btn-secondary mt-2">
+                      Add Option
+                    </button>
+                    {questionIndex === 0 && (
+                      <p className="text-sm text-muted mt-2">Question 1 is the anchor for on-chain metadata and must remain multiple choice.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="form-label">Total Reward Pool (ETH) *</label>
+            <input type="number" step="0.0001" min="0.0001" value={totalRewardPool} onChange={(e) => setTotalRewardPool(e.target.value)} disabled={isSubmitting} className="form-input" placeholder="1.0" />
+          </div>
+          <div>
+            <label className="form-label">Max Responses *</label>
+            <input type="number" min="1" value={maxResponses} onChange={(e) => setMaxResponses(e.target.value)} disabled={isSubmitting} className="form-input" placeholder="100" />
+          </div>
+        </div>
+
+        <div className="surface">
+          <p className="text-base font-semibold mb-1">Deposit Preview</p>
+          <p className="text-sm">Total ETH deposit: <strong>{depositEth} ETH</strong></p>
+          <p className="text-sm text-muted mt-2">Auto reward per response: <strong>{computedRewardPerResponseEth} ETH</strong></p>
+          <p className="text-sm text-muted mt-2">({totalRewardPool || 0} ETH / {maxResponses || 0} responses)</p>
+          {!isEvenlyDivisible && totalRewardPoolWei > 0n && maxResponsesWei > 0n && (
+            <p className="text-sm mt-2" style={{ color: "var(--danger)" }}>
+              Total reward pool is not evenly divisible by max responses at wei precision.
             </p>
           )}
         </div>
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          style={{
-            width: "100%",
-            padding: "1rem",
-            fontSize: "1.1rem",
-            fontWeight: "bold",
-            backgroundColor: isSubmitting ? "#ccc" : "#007bff",
-            color: "white",
-            border: "none",
-            borderRadius: "4px",
-            cursor: isSubmitting ? "not-allowed" : "pointer",
-          }}
-        >
-          {isSubmitting ? "Creating Survey..." : "Create Survey (Deposit Required)"}
+        <div className="surface">
+          <p className="text-sm text-muted">Quality rules are configured separately in the dedicated &quot;Quality Rules&quot; panel and saved off-chain.</p>
+        </div>
+
+        <button type="submit" disabled={isSubmitting || hasOnChainCreateRole === false} className="btn btn-primary w-full">
+          {isSubmitting ? "Creating Survey..." : "Create Survey"}
         </button>
       </form>
     </div>

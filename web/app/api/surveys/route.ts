@@ -1,7 +1,22 @@
 import { NextResponse } from "next/server";
+import { inArray } from "drizzle-orm";
 import { Contract, JsonRpcProvider } from "ethers";
 import { SURVEY_REWARD_ABI } from "@/lib/blockchain/contract";
 import { getContractAddress } from "@/lib/blockchain/contract";
+import { getDb, hasDatabaseConfig } from "@/lib/db/client";
+import { surveyQuestionSets } from "@/lib/db/schema";
+import { sanitizeSurveyQuestions } from "@/lib/surveys/questions";
+
+function isMissingQuestionSetTableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const cause = "cause" in error ? (error as { cause?: unknown }).cause : undefined;
+  if (!cause || typeof cause !== "object") {
+    return false;
+  }
+  return "code" in cause && (cause as { code?: unknown }).code === "42P01";
+}
 
 export async function GET(request: Request) {
   try {
@@ -58,7 +73,48 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({ surveys });
+    let questionSetBySurveyId = new Map<number, unknown>();
+    if (hasDatabaseConfig()) {
+      const db = getDb();
+      if (db && surveys.length > 0) {
+        try {
+          const surveyIds = surveys.map((survey) => survey.id);
+          const rows = await db
+            .select({
+              surveyId: surveyQuestionSets.surveyId,
+              questionsJson: surveyQuestionSets.questionsJson
+            })
+            .from(surveyQuestionSets)
+            .where(inArray(surveyQuestionSets.surveyId, surveyIds));
+          questionSetBySurveyId = new Map(rows.map((row) => [row.surveyId, row.questionsJson]));
+        } catch (error) {
+          if (isMissingQuestionSetTableError(error)) {
+            console.warn("Question set table unavailable; falling back to on-chain question only.");
+          } else {
+            console.warn("Failed loading question sets; falling back to on-chain question only.", error);
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({
+      surveys: surveys.map((survey) => {
+        const questionSet = sanitizeSurveyQuestions(questionSetBySurveyId.get(survey.id));
+        const fallback = [
+          {
+            id: "q_1",
+            prompt: survey.question,
+            type: survey.options.length >= 2 ? "multiple_choice" : "text",
+            required: true,
+            options: survey.options.length >= 2 ? survey.options : undefined
+          }
+        ];
+        return {
+          ...survey,
+          questions: questionSet.length > 0 ? questionSet : fallback
+        };
+      })
+    });
   } catch (error) {
     console.error("Error fetching surveys:", error);
     return NextResponse.json(
