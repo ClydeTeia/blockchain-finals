@@ -10,7 +10,28 @@ export async function GET() {
 
   try {
     const answers = await getAllAnswers();
-    return NextResponse.json({ answers });
+    return NextResponse.json({
+      answers: answers.map((answer) => ({
+        id: answer.id,
+        surveyId: answer.surveyId.toString(),
+        respondentWallet: answer.respondentWallet,
+        status: answer.status,
+        validationScore: answer.validationScore,
+        validationStatus: answer.validationStatus,
+        validationReason: answer.validationReason,
+        validationDetails: answer.validationDetails,
+        answerHash: answer.answerHash,
+        rewardAmountWei: answer.rewardAmountWei,
+        completionNonce: answer.completionNonce,
+        completionDeadline: answer.completionDeadline?.toISOString() ?? null,
+        completionSignature: answer.completionSignature,
+        onchainTxHash: answer.onchainTxHash,
+        onchainConfirmedAt: answer.onchainConfirmedAt?.toISOString() ?? null,
+        flagged: answer.flagged,
+        auditNotes: answer.auditNotes,
+        createdAt: answer.createdAt.toISOString()
+      }))
+    });
   } catch (error) {
     console.error("Error fetching answers for admin:", error);
     return NextResponse.json(

@@ -1,11 +1,7 @@
-import { randomUUID } from "node:crypto";
-
-import {
-  hasSupabaseRestConfig,
-  supabaseInsert,
-  supabasePatch,
-  supabaseSelect
-} from "@/lib/storage/supabase-rest";
+﻿import { randomUUID } from "node:crypto";
+import { and, desc, eq, ilike } from "drizzle-orm";
+import { getDb, hasDatabaseConfig } from "@/lib/db/client";
+import { kycRequests } from "@/lib/db/schema";
 
 export type KycStatus = "pending" | "approved" | "rejected" | "revoked";
 
@@ -26,14 +22,14 @@ export type KycRequestRecord = {
   createdAt: Date;
 };
 
-const kycRequests = new Map<string, KycRequestRecord>();
+const memoryStore = new Map<string, KycRequestRecord>();
 
 function isExplicitTestMode(): boolean {
   return process.env.NODE_ENV === "test" || process.env.SUPABASE_TEST_MODE === "1";
 }
 
 function allowMemoryFallback(): boolean {
-  return !hasSupabaseRestConfig() && isExplicitTestMode();
+  return !hasDatabaseConfig() && isExplicitTestMode();
 }
 
 function makePersistenceError(message: string, code: string): Error & { code: string } {
@@ -42,37 +38,22 @@ function makePersistenceError(message: string, code: string): Error & { code: st
   return error;
 }
 
-function normalizeRow(row: {
-  id: string;
-  wallet_address: string;
-  status: KycStatus;
-  bucket_id: string;
-  document_path: string;
-  selfie_path: string;
-  document_hash: string;
-  selfie_hash: string;
-  proof_hash: string;
-  submitted_at: string;
-  reviewed_at: string | null;
-  reviewer_wallet: string | null;
-  decision_reason: string | null;
-  created_at: string;
-}): KycRequestRecord {
+function toRecord(row: typeof kycRequests.$inferSelect): KycRequestRecord {
   return {
     id: row.id,
-    walletAddress: row.wallet_address,
-    status: row.status,
-    bucketId: row.bucket_id,
-    documentPath: row.document_path,
-    selfiePath: row.selfie_path,
-    documentHash: row.document_hash,
-    selfieHash: row.selfie_hash,
-    proofHash: row.proof_hash,
-    submittedAt: new Date(row.submitted_at),
-    reviewedAt: row.reviewed_at ? new Date(row.reviewed_at) : null,
-    reviewerWallet: row.reviewer_wallet,
-    decisionReason: row.decision_reason,
-    createdAt: new Date(row.created_at)
+    walletAddress: row.walletAddress,
+    status: row.status as KycStatus,
+    bucketId: row.bucketId,
+    documentPath: row.documentPath,
+    selfiePath: row.selfiePath,
+    documentHash: row.documentHash,
+    selfieHash: row.selfieHash,
+    proofHash: row.proofHash,
+    submittedAt: row.submittedAt,
+    reviewedAt: row.reviewedAt ?? null,
+    reviewerWallet: row.reviewerWallet ?? null,
+    decisionReason: row.decisionReason ?? null,
+    createdAt: row.createdAt
   };
 }
 
@@ -104,157 +85,100 @@ export async function createKycRequest(input: {
     createdAt: now
   };
 
-  if (hasSupabaseRestConfig()) {
-    const inserted = await supabaseInsert("kyc_requests", {
-      id: record.id,
-      wallet_address: record.walletAddress,
-      status: record.status,
-      bucket_id: record.bucketId,
-      document_path: record.documentPath,
-      selfie_path: record.selfiePath,
-      document_hash: record.documentHash,
-      selfie_hash: record.selfieHash,
-      proof_hash: record.proofHash,
-      submitted_at: record.submittedAt.toISOString()
-    });
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      try {
+        await db.insert(kycRequests).values(record);
+      } catch {
+        const [existingDocument, existingSelfie] = await Promise.all([
+          db.select({ id: kycRequests.id }).from(kycRequests).where(eq(kycRequests.documentHash, record.documentHash)).limit(1),
+          db.select({ id: kycRequests.id }).from(kycRequests).where(eq(kycRequests.selfieHash, record.selfieHash)).limit(1)
+        ]);
 
-    if (!inserted) {
-      const [existingDocument, existingSelfie] = await Promise.all([
-        supabaseSelect<{ id: string }>(
-          `kyc_requests?select=id&document_hash=eq.${encodeURIComponent(record.documentHash)}&limit=1`
-        ),
-        supabaseSelect<{ id: string }>(
-          `kyc_requests?select=id&selfie_hash=eq.${encodeURIComponent(record.selfieHash)}&limit=1`
-        )
-      ]);
+        if (existingDocument.length > 0 || existingSelfie.length > 0) {
+          throw makePersistenceError("Duplicate KYC image hash.", "DUPLICATE_KYC_HASH");
+        }
 
-      if ((existingDocument?.length ?? 0) > 0 || (existingSelfie?.length ?? 0) > 0) {
-        throw makePersistenceError("Duplicate KYC image hash.", "DUPLICATE_KYC_HASH");
+        throw makePersistenceError("Failed to persist KYC request.", "KYC_PERSIST_FAILED");
       }
-
-      throw makePersistenceError("Failed to persist KYC request.", "KYC_PERSIST_FAILED");
+      return record;
     }
-  } else if (allowMemoryFallback()) {
-    kycRequests.set(record.id, record);
-  } else {
-    throw makePersistenceError(
-      "Supabase REST is not configured for KYC persistence.",
-      "SUPABASE_CONFIG_MISSING"
-    );
   }
 
-  return record;
+  if (allowMemoryFallback()) {
+    const hasDuplicate = [...memoryStore.values()].some(
+      (item) =>
+        item.documentHash === record.documentHash ||
+        item.selfieHash === record.selfieHash
+    );
+    if (hasDuplicate) {
+      throw makePersistenceError("Duplicate KYC image hash.", "DUPLICATE_KYC_HASH");
+    }
+    memoryStore.set(record.id, record);
+    return record;
+  }
+
+  throw makePersistenceError("Database is not configured for KYC persistence.", "SUPABASE_CONFIG_MISSING");
 }
 
-export async function getLatestKycRequestByWallet(
-  walletAddress: string
-): Promise<KycRequestRecord | null> {
-  if (hasSupabaseRestConfig()) {
-    const rows = await supabaseSelect<{
-      id: string;
-      wallet_address: string;
-      status: KycStatus;
-      bucket_id: string;
-      document_path: string;
-      selfie_path: string;
-      document_hash: string;
-      selfie_hash: string;
-      proof_hash: string;
-      submitted_at: string;
-      reviewed_at: string | null;
-      reviewer_wallet: string | null;
-      decision_reason: string | null;
-      created_at: string;
-    }>(
-      `kyc_requests?select=*&wallet_address=ilike.${encodeURIComponent(
-        walletAddress
-      )}&order=created_at.desc&limit=1`
-    );
-
-    const row = rows?.[0];
-    return row ? normalizeRow(row) : null;
+export async function getLatestKycRequestByWallet(walletAddress: string): Promise<KycRequestRecord | null> {
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db
+        .select()
+        .from(kycRequests)
+        .where(ilike(kycRequests.walletAddress, walletAddress))
+        .orderBy(desc(kycRequests.createdAt))
+        .limit(1);
+      return rows[0] ? toRecord(rows[0]) : null;
+    }
   }
 
   if (!allowMemoryFallback()) {
-    throw makePersistenceError(
-      "Supabase REST is not configured for KYC reads.",
-      "SUPABASE_CONFIG_MISSING"
-    );
+    throw makePersistenceError("Database is not configured for KYC reads.", "SUPABASE_CONFIG_MISSING");
   }
 
-  const records = [...kycRequests.values()]
-    .filter(
-      (item) => item.walletAddress.toLowerCase() === walletAddress.toLowerCase()
-    )
+  const records = [...memoryStore.values()]
+    .filter((item) => item.walletAddress.toLowerCase() === walletAddress.toLowerCase())
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   return records[0] ?? null;
 }
 
 export async function getKycRequestById(id: string): Promise<KycRequestRecord | null> {
-  if (hasSupabaseRestConfig()) {
-    const rows = await supabaseSelect<{
-      id: string;
-      wallet_address: string;
-      status: KycStatus;
-      bucket_id: string;
-      document_path: string;
-      selfie_path: string;
-      document_hash: string;
-      selfie_hash: string;
-      proof_hash: string;
-      submitted_at: string;
-      reviewed_at: string | null;
-      reviewer_wallet: string | null;
-      decision_reason: string | null;
-      created_at: string;
-    }>(`kyc_requests?select=*&id=eq.${encodeURIComponent(id)}&limit=1`);
-
-    const row = rows?.[0];
-    return row ? normalizeRow(row) : null;
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db.select().from(kycRequests).where(eq(kycRequests.id, id)).limit(1);
+      return rows[0] ? toRecord(rows[0]) : null;
+    }
   }
 
   if (!allowMemoryFallback()) {
-    throw makePersistenceError(
-      "Supabase REST is not configured for KYC reads.",
-      "SUPABASE_CONFIG_MISSING"
-    );
+    throw makePersistenceError("Database is not configured for KYC reads.", "SUPABASE_CONFIG_MISSING");
   }
 
-  return kycRequests.get(id) ?? null;
+  return memoryStore.get(id) ?? null;
 }
 
 export async function listKycRequests(status?: KycStatus): Promise<KycRequestRecord[]> {
-  if (hasSupabaseRestConfig()) {
-    const statusFilter = status ? `&status=eq.${encodeURIComponent(status)}` : "";
-    const rows = await supabaseSelect<{
-      id: string;
-      wallet_address: string;
-      status: KycStatus;
-      bucket_id: string;
-      document_path: string;
-      selfie_path: string;
-      document_hash: string;
-      selfie_hash: string;
-      proof_hash: string;
-      submitted_at: string;
-      reviewed_at: string | null;
-      reviewer_wallet: string | null;
-      decision_reason: string | null;
-      created_at: string;
-    }>(`kyc_requests?select=*&order=created_at.desc${statusFilter}`);
-
-    return (rows ?? []).map(normalizeRow);
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = status
+        ? await db.select().from(kycRequests).where(eq(kycRequests.status, status)).orderBy(desc(kycRequests.createdAt))
+        : await db.select().from(kycRequests).orderBy(desc(kycRequests.createdAt));
+      return rows.map(toRecord);
+    }
   }
 
   if (!allowMemoryFallback()) {
-    throw makePersistenceError(
-      "Supabase REST is not configured for KYC reads.",
-      "SUPABASE_CONFIG_MISSING"
-    );
+    throw makePersistenceError("Database is not configured for KYC reads.", "SUPABASE_CONFIG_MISSING");
   }
 
-  return [...kycRequests.values()]
+  return [...memoryStore.values()]
     .filter((item) => (status ? item.status === status : true))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
@@ -265,27 +189,30 @@ export async function decideKycRequest(input: {
   reviewerWallet: string;
   decisionReason: string | null;
 }): Promise<KycRequestRecord | null> {
-  if (hasSupabaseRestConfig()) {
-    const ok = await supabasePatch(`kyc_requests?id=eq.${encodeURIComponent(input.id)}`, {
-      status: input.status,
-      reviewer_wallet: input.reviewerWallet,
-      decision_reason: input.decisionReason,
-      reviewed_at: new Date().toISOString()
-    });
-    if (!ok) {
-      throw makePersistenceError("Failed to persist KYC decision.", "KYC_PERSIST_FAILED");
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const reviewedAt = new Date();
+      const rows = await db
+        .update(kycRequests)
+        .set({
+          status: input.status,
+          reviewerWallet: input.reviewerWallet,
+          decisionReason: input.decisionReason,
+          reviewedAt
+        })
+        .where(eq(kycRequests.id, input.id))
+        .returning();
+
+      return rows[0] ? toRecord(rows[0]) : null;
     }
-    return getKycRequestById(input.id);
   }
 
   if (!allowMemoryFallback()) {
-    throw makePersistenceError(
-      "Supabase REST is not configured for KYC decisions.",
-      "SUPABASE_CONFIG_MISSING"
-    );
+    throw makePersistenceError("Database is not configured for KYC decisions.", "SUPABASE_CONFIG_MISSING");
   }
 
-  const existing = kycRequests.get(input.id);
+  const existing = memoryStore.get(input.id);
   if (!existing) {
     return null;
   }
@@ -297,11 +224,10 @@ export async function decideKycRequest(input: {
     decisionReason: input.decisionReason,
     reviewedAt: new Date()
   };
-
-  kycRequests.set(input.id, updated);
+  memoryStore.set(input.id, updated);
   return updated;
 }
 
 export function resetKycStoreForTests(): void {
-  kycRequests.clear();
+  memoryStore.clear();
 }

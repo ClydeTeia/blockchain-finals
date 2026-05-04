@@ -21,6 +21,7 @@ describe("Phase 7 route handlers", () => {
     process.env.QUALITY_MIN_COMPLETION_SECONDS = "30";
     process.env.QUALITY_MIN_TEXT_LENGTH = "20";
     process.env.QUALITY_PASSING_SCORE = "70";
+    process.env.ADMIN_WALLET_ALLOWLIST = "";
   });
 
   async function authenticate(wallet: { address: string }) {
@@ -191,5 +192,33 @@ describe("Phase 7 route handlers", () => {
       })
     );
     expect(submitResponse.status).toBe(403);
+  });
+
+  it("allows admin wallet submissions without KYC verification", async () => {
+    const wallet = Wallet.createRandom();
+    await authenticate(wallet);
+    process.env.VERIFIED_WALLET_ALLOWLIST = "";
+    process.env.ADMIN_WALLET_ALLOWLIST = wallet.address;
+
+    const startAttemptResponse = await startAttemptPost(
+      new Request("http://localhost/api/surveys/1/start-attempt", { method: "POST" }),
+      { params: Promise.resolve({ surveyId: "1" }) }
+    );
+    expect(startAttemptResponse.status).toBe(200);
+    const startAttemptBody = (await startAttemptResponse.json()) as { attemptId: string };
+
+    const submitResponse = await submitPost(
+      new Request("http://localhost/api/answers/submit", {
+        method: "POST",
+        body: JSON.stringify({
+          surveyId: "1",
+          attemptId: startAttemptBody.attemptId,
+          rewardAmountWei: "1000",
+          completionTimeSeconds: 60,
+          answer: { q1: "admin wallet answer without KYC should pass verification gate." }
+        })
+      })
+    );
+    expect(submitResponse.status).toBe(200);
   });
 });

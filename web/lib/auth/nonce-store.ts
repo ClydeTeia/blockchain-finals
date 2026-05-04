@@ -1,10 +1,7 @@
-import { NONCE_TTL_SECONDS } from "./config";
-import {
-  hasSupabaseRestConfig,
-  supabaseInsert,
-  supabasePatch,
-  supabaseSelect
-} from "@/lib/storage/supabase-rest";
+﻿import { NONCE_TTL_SECONDS } from "./config";
+import { and, eq, isNull } from "drizzle-orm";
+import { getDb, hasDatabaseConfig } from "@/lib/db/client";
+import { authNonces } from "@/lib/db/schema";
 
 export type NonceRecord = {
   walletAddress: string;
@@ -42,80 +39,86 @@ export async function createNonceRecord(params: {
     createdAt: now
   };
 
-  if (hasSupabaseRestConfig()) {
-    const inserted = await supabaseInsert("auth_nonces", {
-      wallet_address: record.walletAddress,
-      nonce: record.nonce,
-      message: record.message,
-      expires_at: record.expiresAt.toISOString()
-    });
+  nonceStore.set(record.nonce, record);
 
-    if (!inserted) {
-      nonceStore.set(record.nonce, record);
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      try {
+        await db.insert(authNonces).values({
+          nonce: record.nonce,
+          walletAddress: record.walletAddress,
+          message: record.message,
+          expiresAt: record.expiresAt,
+          usedAt: null,
+          createdAt: record.createdAt
+        });
+      } catch {
+        return record;
+      }
     }
-  } else {
-    nonceStore.set(record.nonce, record);
   }
 
   return record;
 }
 
 export async function getNonceRecord(nonce: string): Promise<NonceRecord | null> {
-  if (hasSupabaseRestConfig()) {
-    const rows = await supabaseSelect<{
-      wallet_address: string;
-      nonce: string;
-      message: string;
-      expires_at: string;
-      used_at: string | null;
-      created_at: string;
-    }>(
-      `auth_nonces?select=wallet_address,nonce,message,expires_at,used_at,created_at&nonce=eq.${encodeURIComponent(
-        nonce
-      )}&limit=1`
-    );
-
-    const row = rows?.[0];
-    if (!row) {
+  const getFromMemoryStore = (): NonceRecord | null => {
+    const fallbackRecord = nonceStore.get(nonce);
+    if (!fallbackRecord) {
       return null;
     }
 
-    const record: NonceRecord = {
-      walletAddress: row.wallet_address,
-      nonce: row.nonce,
-      message: row.message,
-      expiresAt: new Date(row.expires_at),
-      usedAt: row.used_at ? new Date(row.used_at) : null,
-      createdAt: new Date(row.created_at)
-    };
-
-    if (record.expiresAt <= new Date()) {
+    if (fallbackRecord.expiresAt <= new Date()) {
+      nonceStore.delete(nonce);
       return null;
     }
 
-    return record;
+    return fallbackRecord;
+  };
+
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db
+        .select()
+        .from(authNonces)
+        .where(eq(authNonces.nonce, nonce))
+        .limit(1);
+      const row = rows[0];
+      if (!row) {
+        return getFromMemoryStore();
+      }
+      if (row.expiresAt <= new Date()) {
+        return getFromMemoryStore();
+      }
+      return {
+        walletAddress: row.walletAddress,
+        nonce: row.nonce,
+        message: row.message,
+        expiresAt: row.expiresAt,
+        usedAt: row.usedAt ?? null,
+        createdAt: row.createdAt
+      };
+    }
   }
 
-  const record = nonceStore.get(nonce);
-  if (!record) {
-    return null;
-  }
-
-  if (record.expiresAt <= new Date()) {
-    nonceStore.delete(nonce);
-    return null;
-  }
-
-  return record;
+  return getFromMemoryStore();
 }
 
 export async function markNonceAsUsed(nonce: string): Promise<void> {
-  if (hasSupabaseRestConfig()) {
-    await supabasePatch(
-      `auth_nonces?nonce=eq.${encodeURIComponent(nonce)}`,
-      { used_at: new Date().toISOString() }
-    );
-    return;
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const now = new Date();
+      const result = await db
+        .update(authNonces)
+        .set({ usedAt: now })
+        .where(and(eq(authNonces.nonce, nonce), isNull(authNonces.usedAt)));
+      if (result.rowCount && result.rowCount > 0) {
+        return;
+      }
+    }
   }
 
   const record = nonceStore.get(nonce);

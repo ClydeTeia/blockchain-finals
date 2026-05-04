@@ -15,8 +15,9 @@ import {
   signCompletionProof
 } from "@/lib/answers/proof";
 import { evaluateQualityGate } from "@/lib/answers/quality-gate";
+import { isAdminWallet } from "@/lib/auth/admin";
 import { requireSession } from "@/lib/auth/require-session";
-import { isWalletVerified } from "@/lib/blockchain/verification";
+import { isWalletAdminOnChain, isWalletVerified } from "@/lib/blockchain/verification";
 
 type SubmitRequest = {
   surveyId?: string;
@@ -83,8 +84,11 @@ export async function POST(request: Request) {
     );
   }
 
+  const isAdmin =
+    isAdminWallet(session.walletAddress) ||
+    (await isWalletAdminOnChain(session.walletAddress));
   const verified = await isWalletVerified(session.walletAddress);
-  if (!verified) {
+  if (!isAdmin && !verified) {
     return NextResponse.json(
       { error: "Wallet is not verified for reward surveys." },
       { status: 403 }

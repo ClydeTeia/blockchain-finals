@@ -1,26 +1,58 @@
-import { randomUUID } from "node:crypto";
-
-import {
-  hasSupabaseRestConfig,
-  supabaseInsert,
-  supabasePatch,
-  supabaseSelect
-} from "@/lib/storage/supabase-rest";
-import type {
-  SubmitAnswerPayload,
-  SurveyAnswerRecord,
-  SurveyAttemptRecord
-} from "./types";
+﻿import { randomUUID } from "node:crypto";
+import { and, desc, eq, ilike, inArray } from "drizzle-orm";
+import { getDb, hasDatabaseConfig } from "@/lib/db/client";
+import { surveyAnswers, surveyAttempts } from "@/lib/db/schema";
+import type { SubmitAnswerPayload, SurveyAnswerRecord, SurveyAttemptRecord } from "./types";
 
 const attempts = new Map<string, SurveyAttemptRecord>();
 const answers = new Map<string, SurveyAnswerRecord>();
 
-function toIsoNow(): string {
-  return new Date().toISOString();
-}
-
 function makeAttemptId(): string {
   return randomUUID();
+}
+
+function toAttemptRecord(row: typeof surveyAttempts.$inferSelect): SurveyAttemptRecord {
+  return {
+    id: row.id,
+    surveyId: BigInt(row.surveyId),
+    respondentWallet: row.respondentWallet,
+    status: row.status as SurveyAttemptRecord["status"],
+    startedAt: row.startedAt,
+    submittedAt: row.submittedAt ?? null,
+    userAgent: row.userAgent ?? null,
+    ipHash: row.ipHash ?? null,
+    createdAt: row.createdAt
+  };
+}
+
+function toAnswerRecord(row: typeof surveyAnswers.$inferSelect): SurveyAnswerRecord {
+  return {
+    id: row.id,
+    attemptId: row.attemptId,
+    surveyId: BigInt(row.surveyId),
+    respondentWallet: row.respondentWallet,
+    answerJson: row.answerJson,
+    normalizedAnswerJson: row.normalizedAnswerJson,
+    answerHash: row.answerHash,
+    salt: row.salt,
+    status: row.status as SurveyAnswerRecord["status"],
+    validationScore: row.validationScore,
+    validationStatus: row.validationStatus as "passed" | "failed",
+    validationReason: row.validationReason ?? null,
+    validationDetails: (row.validationDetails as Record<string, unknown>) ?? {},
+    startedAt: row.startedAt,
+    submittedAt: row.submittedAt,
+    completionTimeSeconds: row.completionTimeSeconds,
+    rewardAmountWei: row.rewardAmountWei,
+    completionNonce: row.completionNonce,
+    completionDeadline: row.completionDeadline ?? null,
+    completionSignature: row.completionSignature ?? null,
+    onchainTxHash: row.onchainTxHash ?? null,
+    onchainConfirmedAt: row.onchainConfirmedAt ?? null,
+    flagged: row.flagged,
+    auditNotes: row.auditNotes ?? null,
+    createdAt: row.createdAt
+  };
 }
 
 export async function createAttempt(input: {
@@ -42,76 +74,52 @@ export async function createAttempt(input: {
     createdAt: now
   };
 
-  if (hasSupabaseRestConfig()) {
-    const inserted = await supabaseInsert("survey_attempts", {
-      id: record.id,
-      survey_id: record.surveyId.toString(),
-      respondent_wallet: record.respondentWallet,
-      status: record.status,
-      started_at: record.startedAt.toISOString(),
-      submitted_at: null,
-      user_agent: record.userAgent,
-      ip_hash: record.ipHash
-    });
-
-    if (!inserted) {
-      attempts.set(record.id, record);
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      try {
+        await db.insert(surveyAttempts).values({
+          id: record.id,
+          surveyId: Number(record.surveyId),
+          respondentWallet: record.respondentWallet,
+          status: record.status,
+          startedAt: record.startedAt,
+          submittedAt: null,
+          userAgent: record.userAgent,
+          ipHash: record.ipHash,
+          createdAt: record.createdAt
+        });
+      } catch {
+        attempts.set(record.id, record);
+      }
+      return record;
     }
-  } else {
-    attempts.set(record.id, record);
   }
 
+  attempts.set(record.id, record);
   return record;
 }
 
 export async function getAttemptById(id: string): Promise<SurveyAttemptRecord | null> {
-  if (hasSupabaseRestConfig()) {
-    const rows = await supabaseSelect<{
-      id: string;
-      survey_id: string;
-      respondent_wallet: string;
-      status: "started" | "submitted";
-      started_at: string;
-      submitted_at: string | null;
-      user_agent: string | null;
-      ip_hash: string | null;
-      created_at: string;
-    }>(
-      `survey_attempts?select=id,survey_id,respondent_wallet,status,started_at,submitted_at,user_agent,ip_hash,created_at&id=eq.${encodeURIComponent(
-        id
-      )}&limit=1`
-    );
-    const row = rows?.[0];
-    if (!row) {
-      return null;
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db.select().from(surveyAttempts).where(eq(surveyAttempts.id, id)).limit(1);
+      return rows[0] ? toAttemptRecord(rows[0]) : null;
     }
-    return {
-      id: row.id,
-      surveyId: BigInt(row.survey_id),
-      respondentWallet: row.respondent_wallet,
-      status: row.status,
-      startedAt: new Date(row.started_at),
-      submittedAt: row.submitted_at ? new Date(row.submitted_at) : null,
-      userAgent: row.user_agent,
-      ipHash: row.ip_hash,
-      createdAt: new Date(row.created_at)
-    };
   }
-
   return attempts.get(id) ?? null;
 }
 
 export async function markAttemptSubmitted(id: string): Promise<void> {
-  if (hasSupabaseRestConfig()) {
-    await supabasePatch(
-      `survey_attempts?id=eq.${encodeURIComponent(id)}`,
-      {
-        status: "submitted",
-        submitted_at: toIsoNow()
-      }
-    );
-    return;
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      await db.update(surveyAttempts).set({ status: "submitted", submittedAt: new Date() }).where(eq(surveyAttempts.id, id));
+      return;
+    }
   }
+
   const record = attempts.get(id);
   if (!record) {
     return;
@@ -121,86 +129,30 @@ export async function markAttemptSubmitted(id: string): Promise<void> {
   attempts.set(id, record);
 }
 
-export async function findSubmittedAnswerBySurveyAndWallet(
-  surveyId: bigint,
-  walletAddress: string
-): Promise<SurveyAnswerRecord | null> {
-  if (hasSupabaseRestConfig()) {
-    const rows = await supabaseSelect<{
-      id: string;
-      attempt_id: string;
-      survey_id: string;
-      respondent_wallet: string;
-      answer_json: unknown;
-      normalized_answer_json: unknown;
-      answer_hash: string;
-      salt: string;
-      status: SurveyAnswerRecord["status"];
-      validation_score: number;
-      validation_status: "passed" | "failed";
-      validation_reason: string | null;
-      validation_details: Record<string, unknown> | null;
-      started_at: string;
-      submitted_at: string;
-      completion_time_seconds: number;
-      reward_amount_wei: string | null;
-      completion_nonce: string;
-      completion_deadline: string | null;
-      completion_signature: string | null;
-      onchain_tx_hash: string | null;
-      onchain_confirmed_at: string | null;
-      flagged: boolean;
-      audit_notes: string | null;
-      created_at: string;
-    }>(
-      `survey_answers?select=*&survey_id=eq.${surveyId.toString()}&respondent_wallet=ilike.${encodeURIComponent(
-        walletAddress
-      )}&status=in.(pending_onchain,completed_onchain,claimed)&limit=1`
-    );
-    const row = rows?.[0];
-    if (!row) {
-      return null;
+export async function findSubmittedAnswerBySurveyAndWallet(surveyId: bigint, walletAddress: string): Promise<SurveyAnswerRecord | null> {
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db
+        .select()
+        .from(surveyAnswers)
+        .where(
+          and(
+            eq(surveyAnswers.surveyId, Number(surveyId)),
+            ilike(surveyAnswers.respondentWallet, walletAddress),
+            inArray(surveyAnswers.status, ["pending_onchain", "completed_onchain", "claimed"])
+          )
+        )
+        .limit(1);
+      return rows[0] ? toAnswerRecord(rows[0]) : null;
     }
-    return {
-      id: row.id,
-      attemptId: row.attempt_id,
-      surveyId: BigInt(row.survey_id),
-      respondentWallet: row.respondent_wallet,
-      answerJson: row.answer_json,
-      normalizedAnswerJson: row.normalized_answer_json,
-      answerHash: row.answer_hash,
-      salt: row.salt,
-      status: row.status,
-      validationScore: row.validation_score,
-      validationStatus: row.validation_status,
-      validationReason: row.validation_reason,
-      validationDetails: row.validation_details ?? {},
-      startedAt: new Date(row.started_at),
-      submittedAt: new Date(row.submitted_at),
-      completionTimeSeconds: row.completion_time_seconds,
-      rewardAmountWei: row.reward_amount_wei ?? "0",
-      completionNonce: row.completion_nonce,
-      completionDeadline: row.completion_deadline
-        ? new Date(row.completion_deadline)
-        : null,
-      completionSignature: row.completion_signature,
-      onchainTxHash: row.onchain_tx_hash,
-      onchainConfirmedAt: row.onchain_confirmed_at
-        ? new Date(row.onchain_confirmed_at)
-        : null,
-      flagged: row.flagged,
-      auditNotes: row.audit_notes,
-      createdAt: new Date(row.created_at)
-    };
   }
 
   for (const answer of answers.values()) {
     if (
       answer.surveyId === surveyId &&
       answer.respondentWallet.toLowerCase() === walletAddress.toLowerCase() &&
-      (answer.status === "pending_onchain" ||
-        answer.status === "completed_onchain" ||
-        answer.status === "claimed")
+      (answer.status === "pending_onchain" || answer.status === "completed_onchain" || answer.status === "claimed")
     ) {
       return answer;
     }
@@ -208,12 +160,9 @@ export async function findSubmittedAnswerBySurveyAndWallet(
   return null;
 }
 
-export async function createAnswer(
-  payload: SubmitAnswerPayload
-): Promise<SurveyAnswerRecord> {
+export async function createAnswer(payload: SubmitAnswerPayload): Promise<SurveyAnswerRecord> {
   const now = new Date();
-  const status =
-    payload.validationStatus === "passed" ? "pending_onchain" : "failed_validation";
+  const status = payload.validationStatus === "passed" ? "pending_onchain" : "failed_validation";
 
   const record: SurveyAnswerRecord = {
     id: randomUUID(),
@@ -243,122 +192,70 @@ export async function createAnswer(
     createdAt: now
   };
 
-  if (hasSupabaseRestConfig()) {
-    const inserted = await supabaseInsert("survey_answers", {
-      id: record.id,
-      attempt_id: record.attemptId,
-      survey_id: record.surveyId.toString(),
-      respondent_wallet: record.respondentWallet,
-      answer_json: record.answerJson,
-      normalized_answer_json: record.normalizedAnswerJson,
-      answer_hash: record.answerHash,
-      salt: record.salt,
-      status: record.status,
-      validation_score: record.validationScore,
-      validation_status: record.validationStatus,
-      validation_reason: record.validationReason,
-      validation_details: record.validationDetails,
-      started_at: record.startedAt.toISOString(),
-      submitted_at: record.submittedAt.toISOString(),
-      completion_time_seconds: record.completionTimeSeconds,
-      reward_amount_wei: record.rewardAmountWei,
-      completion_nonce: record.completionNonce,
-      completion_deadline: record.completionDeadline?.toISOString() ?? null,
-      completion_signature: record.completionSignature
-    });
-
-    if (!inserted) {
-      answers.set(record.id, record);
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      try {
+        await db.insert(surveyAnswers).values({
+          id: record.id,
+          attemptId: record.attemptId,
+          surveyId: Number(record.surveyId),
+          respondentWallet: record.respondentWallet,
+          answerJson: record.answerJson,
+          normalizedAnswerJson: record.normalizedAnswerJson,
+          answerHash: record.answerHash,
+          salt: record.salt,
+          status: record.status,
+          validationScore: record.validationScore,
+          validationStatus: record.validationStatus,
+          validationReason: record.validationReason,
+          validationDetails: record.validationDetails,
+          startedAt: record.startedAt,
+          submittedAt: record.submittedAt,
+          completionTimeSeconds: record.completionTimeSeconds,
+          rewardAmountWei: record.rewardAmountWei,
+          completionNonce: record.completionNonce,
+          completionDeadline: record.completionDeadline,
+          completionSignature: record.completionSignature,
+          onchainTxHash: null,
+          onchainConfirmedAt: null,
+          flagged: false,
+          auditNotes: null,
+          createdAt: record.createdAt
+        });
+      } catch {
+        answers.set(record.id, record);
+      }
+      return record;
     }
-  } else {
-    answers.set(record.id, record);
   }
 
+  answers.set(record.id, record);
   return record;
 }
 
 export async function getAnswerById(id: string): Promise<SurveyAnswerRecord | null> {
-  if (hasSupabaseRestConfig()) {
-    const rows = await supabaseSelect<{
-      id: string;
-      attempt_id: string;
-      survey_id: string;
-      respondent_wallet: string;
-      answer_json: unknown;
-      normalized_answer_json: unknown;
-      answer_hash: string;
-      salt: string;
-      status: SurveyAnswerRecord["status"];
-      validation_score: number;
-      validation_status: "passed" | "failed";
-      validation_reason: string | null;
-      validation_details: Record<string, unknown> | null;
-      started_at: string;
-      submitted_at: string;
-      completion_time_seconds: number;
-      reward_amount_wei: string | null;
-      completion_nonce: string;
-      completion_deadline: string | null;
-      completion_signature: string | null;
-      onchain_tx_hash: string | null;
-      onchain_confirmed_at: string | null;
-      flagged: boolean;
-      audit_notes: string | null;
-      created_at: string;
-    }>(`survey_answers?select=*&id=eq.${encodeURIComponent(id)}&limit=1`);
-
-    const row = rows?.[0];
-    if (!row) {
-      return null;
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db.select().from(surveyAnswers).where(eq(surveyAnswers.id, id)).limit(1);
+      return rows[0] ? toAnswerRecord(rows[0]) : null;
     }
-    return {
-      id: row.id,
-      attemptId: row.attempt_id,
-      surveyId: BigInt(row.survey_id),
-      respondentWallet: row.respondent_wallet,
-      answerJson: row.answer_json,
-      normalizedAnswerJson: row.normalized_answer_json,
-      answerHash: row.answer_hash,
-      salt: row.salt,
-      status: row.status,
-      validationScore: row.validation_score,
-      validationStatus: row.validation_status,
-      validationReason: row.validation_reason,
-      validationDetails: row.validation_details ?? {},
-      startedAt: new Date(row.started_at),
-      submittedAt: new Date(row.submitted_at),
-      completionTimeSeconds: row.completion_time_seconds,
-      rewardAmountWei: row.reward_amount_wei ?? "0",
-      completionNonce: row.completion_nonce,
-      completionDeadline: row.completion_deadline
-        ? new Date(row.completion_deadline)
-        : null,
-      completionSignature: row.completion_signature,
-      onchainTxHash: row.onchain_tx_hash,
-      onchainConfirmedAt: row.onchain_confirmed_at
-        ? new Date(row.onchain_confirmed_at)
-        : null,
-      flagged: row.flagged,
-      auditNotes: row.audit_notes,
-      createdAt: new Date(row.created_at)
-    };
   }
   return answers.get(id) ?? null;
 }
 
-export async function markAnswerOnchainConfirmed(
-  id: string,
-  txHash: string
-): Promise<boolean> {
-  if (hasSupabaseRestConfig()) {
-    return supabasePatch(
-      `survey_answers?id=eq.${encodeURIComponent(id)}`,
-      {
-        status: "completed_onchain",
-        onchain_tx_hash: txHash,
-        onchain_confirmed_at: toIsoNow()
-      }
-    );
+export async function markAnswerOnchainConfirmed(id: string, txHash: string): Promise<boolean> {
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db
+        .update(surveyAnswers)
+        .set({ status: "completed_onchain", onchainTxHash: txHash, onchainConfirmedAt: new Date() })
+        .where(eq(surveyAnswers.id, id))
+        .returning({ id: surveyAnswers.id });
+      return rows.length > 0;
+    }
   }
 
   const record = answers.get(id);
@@ -372,21 +269,17 @@ export async function markAnswerOnchainConfirmed(
   return true;
 }
 
-export async function updateAnswerProof(
-  id: string,
-  nonce: string,
-  deadline: Date,
-  signature: string
-): Promise<boolean> {
-  if (hasSupabaseRestConfig()) {
-    return supabasePatch(
-      `survey_answers?id=eq.${encodeURIComponent(id)}`,
-      {
-        completion_nonce: nonce,
-        completion_deadline: deadline.toISOString(),
-        completion_signature: signature
-      }
-    );
+export async function updateAnswerProof(id: string, nonce: string, deadline: Date, signature: string): Promise<boolean> {
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db
+        .update(surveyAnswers)
+        .set({ completionNonce: nonce, completionDeadline: deadline, completionSignature: signature })
+        .where(eq(surveyAnswers.id, id))
+        .returning({ id: surveyAnswers.id });
+      return rows.length > 0;
+    }
   }
 
   const record = answers.get(id);
@@ -400,160 +293,47 @@ export async function updateAnswerProof(
   return true;
 }
 
-export async function getMyAnswers(
-  walletAddress: string
-): Promise<SurveyAnswerRecord[]> {
-  if (hasSupabaseRestConfig()) {
-    const rows = await supabaseSelect<{
-      id: string;
-      attempt_id: string;
-      survey_id: string;
-      respondent_wallet: string;
-      answer_json: unknown;
-      normalized_answer_json: unknown;
-      answer_hash: string;
-      salt: string;
-      status: SurveyAnswerRecord["status"];
-      validation_score: number;
-      validation_status: "passed" | "failed";
-      validation_reason: string | null;
-      validation_details: Record<string, unknown> | null;
-      started_at: string;
-      submitted_at: string;
-      completion_time_seconds: number;
-      reward_amount_wei: string | null;
-      completion_nonce: string;
-      completion_deadline: string | null;
-      completion_signature: string | null;
-      onchain_tx_hash: string | null;
-      onchain_confirmed_at: string | null;
-      flagged: boolean;
-      audit_notes: string | null;
-      created_at: string;
-    }>(
-      `survey_answers?select=*&respondent_wallet=ilike.${encodeURIComponent(
-        walletAddress
-      )}&order=created_at.desc`
-    );
-
-    return (rows ?? []).map((row) => ({
-      id: row.id,
-      attemptId: row.attempt_id,
-      surveyId: BigInt(row.survey_id),
-      respondentWallet: row.respondent_wallet,
-      answerJson: row.answer_json,
-      normalizedAnswerJson: row.normalized_answer_json,
-      answerHash: row.answer_hash,
-      salt: row.salt,
-      status: row.status,
-      validationScore: row.validation_score,
-      validationStatus: row.validation_status,
-      validationReason: row.validation_reason,
-      validationDetails: row.validation_details ?? {},
-      startedAt: new Date(row.started_at),
-      submittedAt: new Date(row.submitted_at),
-      completionTimeSeconds: row.completion_time_seconds,
-      rewardAmountWei: row.reward_amount_wei ?? "0",
-      completionNonce: row.completion_nonce,
-      completionDeadline: row.completion_deadline
-        ? new Date(row.completion_deadline)
-        : null,
-      completionSignature: row.completion_signature,
-      onchainTxHash: row.onchain_tx_hash,
-      onchainConfirmedAt: row.onchain_confirmed_at
-        ? new Date(row.onchain_confirmed_at)
-        : null,
-      flagged: row.flagged,
-      auditNotes: row.audit_notes,
-      createdAt: new Date(row.created_at)
-    }));
+export async function getMyAnswers(walletAddress: string): Promise<SurveyAnswerRecord[]> {
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db
+        .select()
+        .from(surveyAnswers)
+        .where(ilike(surveyAnswers.respondentWallet, walletAddress))
+        .orderBy(desc(surveyAnswers.createdAt));
+      return rows.map(toAnswerRecord);
+    }
   }
 
   return [...answers.values()]
-    .filter(
-      (answer) =>
-        answer.respondentWallet.toLowerCase() === walletAddress.toLowerCase()
-    )
+    .filter((answer) => answer.respondentWallet.toLowerCase() === walletAddress.toLowerCase())
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 export async function getAllAnswers(): Promise<SurveyAnswerRecord[]> {
-  if (hasSupabaseRestConfig()) {
-    const rows = await supabaseSelect<{
-      id: string;
-      attempt_id: string;
-      survey_id: string;
-      respondent_wallet: string;
-      answer_json: unknown;
-      normalized_answer_json: unknown;
-      answer_hash: string;
-      salt: string;
-      status: SurveyAnswerRecord["status"];
-      validation_score: number;
-      validation_status: "passed" | "failed";
-      validation_reason: string | null;
-      validation_details: Record<string, unknown> | null;
-      started_at: string;
-      submitted_at: string;
-      completion_time_seconds: number;
-      reward_amount_wei: string | null;
-      completion_nonce: string;
-      completion_deadline: string | null;
-      completion_signature: string | null;
-      onchain_tx_hash: string | null;
-      onchain_confirmed_at: string | null;
-      flagged: boolean;
-      audit_notes: string | null;
-      created_at: string;
-    }>(
-      `survey_answers?select=*&order=created_at.desc`
-    );
-
-    return (rows ?? []).map((row) => ({
-      id: row.id,
-      attemptId: row.attempt_id,
-      surveyId: BigInt(row.survey_id),
-      respondentWallet: row.respondent_wallet,
-      answerJson: row.answer_json,
-      normalizedAnswerJson: row.normalized_answer_json,
-      answerHash: row.answer_hash,
-      salt: row.salt,
-      status: row.status,
-      validationScore: row.validation_score,
-      validationStatus: row.validation_status,
-      validationReason: row.validation_reason,
-      validationDetails: row.validation_details ?? {},
-      startedAt: new Date(row.started_at),
-      submittedAt: new Date(row.submitted_at),
-      completionTimeSeconds: row.completion_time_seconds,
-      rewardAmountWei: row.reward_amount_wei ?? "0",
-      completionNonce: row.completion_nonce,
-      completionDeadline: row.completion_deadline
-        ? new Date(row.completion_deadline)
-        : null,
-      completionSignature: row.completion_signature,
-      onchainTxHash: row.onchain_tx_hash,
-      onchainConfirmedAt: row.onchain_confirmed_at
-        ? new Date(row.onchain_confirmed_at)
-        : null,
-      flagged: row.flagged,
-      auditNotes: row.audit_notes,
-      createdAt: new Date(row.created_at)
-    }));
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db.select().from(surveyAnswers).orderBy(desc(surveyAnswers.createdAt));
+      return rows.map(toAnswerRecord);
+    }
   }
 
-  return [...answers.values()]
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return [...answers.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
-export async function updateAnswerFlag(
-  id: string,
-  flagged: boolean
-): Promise<boolean> {
-  if (hasSupabaseRestConfig()) {
-    return supabasePatch(`survey_answers?id=eq.${encodeURIComponent(id)}`, {
-      flagged
-    });
+export async function updateAnswerFlag(id: string, flagged: boolean): Promise<boolean> {
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db
+        .update(surveyAnswers)
+        .set({ flagged })
+        .where(eq(surveyAnswers.id, id))
+        .returning({ id: surveyAnswers.id });
+      return rows.length > 0;
+    }
   }
 
   const record = answers.get(id);
@@ -565,14 +345,17 @@ export async function updateAnswerFlag(
   return true;
 }
 
-export async function updateAnswerAuditNote(
-  id: string,
-  auditNote: string
-): Promise<boolean> {
-  if (hasSupabaseRestConfig()) {
-    return supabasePatch(`survey_answers?id=eq.${encodeURIComponent(id)}`, {
-      audit_notes: auditNote
-    });
+export async function updateAnswerAuditNote(id: string, auditNote: string): Promise<boolean> {
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      const rows = await db
+        .update(surveyAnswers)
+        .set({ auditNotes: auditNote })
+        .where(eq(surveyAnswers.id, id))
+        .returning({ id: surveyAnswers.id });
+      return rows.length > 0;
+    }
   }
 
   const record = answers.get(id);

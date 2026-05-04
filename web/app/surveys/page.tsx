@@ -10,38 +10,30 @@ import { useState } from "react";
 
 export default function SurveysPage() {
   const { account } = useWallet();
-  const { isAuthenticated } = useWalletAuth();
+  const { isAuthenticated, isAdmin, isCreator } = useWalletAuth();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showQualityRulesForm, setShowQualityRulesForm] = useState(false);
   const [createdSurveyId, setCreatedSurveyId] = useState<number | null>(null);
 
-  const canCreateSurvey = account && isAuthenticated;
+  const canCreateSurvey = !!(account && isAuthenticated && (isCreator || isAdmin));
 
   return (
-    <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "2rem 1rem" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
+    <div className="max-w-2xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 style={{ margin: 0 }}>Survey Feed</h1>
-          <p style={{ margin: "0.25rem 0 0 0", color: "#666" }}>
-            Browse active funded surveys and participate to earn rewards
+          <h1 className="text-3xl font-semibold mb-1">Survey Feed</h1>
+          <p className="text-muted text-base">
+            Browse active surveys and participate to earn rewards.
           </p>
         </div>
         {canCreateSurvey && (
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div className="flex gap-3">
             <button
               onClick={() => {
                 setShowCreateForm(!showCreateForm);
                 setShowQualityRulesForm(false);
               }}
-              style={{
-                padding: "0.5rem 1rem",
-                backgroundColor: showCreateForm ? "#6c757d" : "#007bff",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontWeight: "500",
-              }}
+              className={`btn ${showCreateForm ? 'btn-ghost' : 'btn-secondary'}`}
             >
               {showCreateForm ? "Hide Form" : "Create Survey"}
             </button>
@@ -50,15 +42,7 @@ export default function SurveysPage() {
                 setShowQualityRulesForm(!showQualityRulesForm);
                 setShowCreateForm(false);
               }}
-              style={{
-                padding: "0.5rem 1rem",
-                backgroundColor: showQualityRulesForm ? "#6c757d" : "#28a745",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                fontWeight: "500",
-              }}
+              className={`btn ${showQualityRulesForm ? 'btn-ghost' : 'btn-secondary'}`}
             >
               Quality Rules
             </button>
@@ -67,43 +51,33 @@ export default function SurveysPage() {
       </div>
 
       {!account && (
-        <div style={{
-          padding: "1.5rem",
-          backgroundColor: "#fff3cd",
-          border: "1px solid #ffeaa7",
-          borderRadius: "8px",
-          marginBottom: "2rem",
-        }}
-        >
-          <p style={{ margin: 0, color: "#856404", fontSize: "1rem" }}>
-            👋 Please connect your wallet to participate in surveys or create new ones.
+        <div className="p-4 surface mb-8 flex items-center gap-3">
+          <span className="text-lg">👋</span>
+          <p className="font-medium text-sm m-0">
+            Please connect your wallet to participate in surveys or create new ones.
           </p>
         </div>
       )}
 
       {account && !isAuthenticated && (
-        <div style={{
-          padding: "1.5rem",
-          backgroundColor: "#fff3cd",
-          border: "1px solid #ffeaa7",
-          borderRadius: "8px",
-          marginBottom: "2rem",
-        }}
-        >
-          <p style={{ margin: 0, color: "#856404", fontSize: "1rem" }}>
-            🔐 Please sign in with your wallet to access full features.
+        <div className="p-4 surface mb-8 flex items-center gap-3">
+          <span className="text-lg">🔐</span>
+          <p className="font-medium text-sm m-0">
+            Please sign in with your wallet to access full features.
           </p>
         </div>
       )}
 
       {showCreateForm && (
-        <div style={{ marginBottom: "2rem" }}>
+        <div className="mb-8 card">
+          <h2 className="text-xl font-semibold mb-4">Create New Survey</h2>
           <CreateSurveyForm />
         </div>
       )}
 
       {showQualityRulesForm && (
-        <div style={{ marginBottom: "2rem" }}>
+        <div className="mb-8 card">
+           <h2 className="text-xl font-semibold mb-4">Configure Quality Rules</h2>
           <QualityRulesForm
             surveyId={createdSurveyId || 1}
             onCancel={() => {
@@ -114,8 +88,14 @@ export default function SurveysPage() {
         </div>
       )}
 
-      <Suspense fallback={<div>Loading surveys...</div>}>
-        <SurveyFeed />
+      <Suspense fallback={
+        <div className="flex justify-center p-12 text-muted">
+          <div className="animate-spin inline-block w-6 h-6 border-[2px] border-current border-t-transparent text-primary rounded-full" role="status" aria-label="loading"></div>
+        </div>
+      }>
+        <div className="flex flex-col gap-6">
+          <SurveyFeed />
+        </div>
       </Suspense>
     </div>
   );

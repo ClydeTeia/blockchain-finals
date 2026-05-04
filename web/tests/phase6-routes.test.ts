@@ -166,22 +166,19 @@ describe("Phase 6 KYC route handlers", () => {
         body: makeKycFormData()
       })
     );
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(503);
   });
 
   it("returns 409 for duplicate KYC document/selfie hashes", async () => {
     const wallet = Wallet.createRandom();
     login(wallet.address);
-    process.env.SUPABASE_URL = "https://example.supabase.co";
-    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
-
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
-      .mockResolvedValueOnce(new Response(null, { status: 409 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "dup" }]), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([]), { status: 200 }));
-    vi.stubGlobal("fetch", fetchMock);
+    const first = await kycSubmitPost(
+      new Request("http://localhost/api/kyc/submit", {
+        method: "POST",
+        body: makeKycFormData()
+      })
+    );
+    expect(first.status).toBe(200);
 
     const response = await kycSubmitPost(
       new Request("http://localhost/api/kyc/submit", {

@@ -1,53 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { SurveyCard } from "@/components/SurveyCard";
 import { useWallet } from "@/hooks/useWallet";
-
-type SurveyData = {
-  id: number;
-  creator: string;
-  title: string;
-  description: string;
-  question: string;
-  rewardPerResponse: string;
-  maxResponses: string;
-  responseCount: string;
-  escrowRemaining: string;
-  active: boolean;
-  unusedRewardsWithdrawn: boolean;
-  options: string[];
-};
+import { useSurveys } from "@/hooks/useSurveys";
 
 export function SurveyFeed() {
   const { account } = useWallet();
-  const [surveys, setSurveys] = useState<SurveyData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { surveys, isLoading: loading, error, refetch } = useSurveys();
   const [filter, setFilter] = useState<string>("all");
-
-  useEffect(() => {
-    fetchSurveys();
-  }, []);
-
-  async function fetchSurveys() {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/surveys");
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-      const data = await res.json();
-      setSurveys(data.surveys || []);
-    } catch (err: any) {
-      console.error("Error fetching surveys:", err);
-      setError("Failed to load surveys. Please try again later.");
-      setSurveys([]);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   const filteredSurveys = surveys.filter((survey) => {
     if (filter === "active") return survey.active;
@@ -72,7 +33,9 @@ export function SurveyFeed() {
       >
         <p>{error}</p>
         <button
-          onClick={() => fetchSurveys()}
+          onClick={() => {
+            void refetch();
+          }}
           style={{
             marginTop: "1rem",
             padding: "0.5rem 1rem",

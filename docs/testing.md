@@ -1,4 +1,4 @@
-# Testing Strategy (Progress through Phases 0/1/2/3/5/7)
+# Testing Strategy (Evidence Baseline through 2026-05-04)
 
 ## Commands
 From repository root:
@@ -42,12 +42,18 @@ pnpm test
   - Claim/close/refund/pause paths
 - Web/API tests: `web/tests/*.test.ts`
   - Auth routes (`/api/auth/nonce`, `/api/auth/verify`, `/api/auth/logout`, `/api/auth/me`)
+  - KYC routes (`/api/kyc/submit`, `/api/kyc/status`, `/api/admin/kyc-requests`, `/api/admin/kyc/[id]/signed-urls`, `/api/admin/kyc/[id]/approve`, `/api/admin/kyc/[id]/reject`)
   - Phase 7 routes (`/api/surveys/:surveyId/start-attempt`, `/api/answers/submit`, `/api/answers/:id/refresh-proof`, `/api/answers/:id/mark-onchain-confirmed`, `/api/answers/my`)
+  - Survey UI flow coverage (`tests/phase10-survey-ui.test.ts`)
+  - Adapter/UI integration checks (`tests/phase8-9-11-adapters.test.ts`)
   - Error-path and branch coverage tests for route handlers
   - Library unit tests for answer hashing/proof helpers and auth/session helpers
 
-## Latest Validation Run (2026-05-02)
-- `rtk pnpm lint`: passed
-- `rtk pnpm test`: passed
-- `rtk pnpm build`: passed
-- `rtk pnpm typecheck`: returned non-zero despite `TypeScript: No errors found`; rerun with plain `pnpm typecheck` passed
+## Latest Validation Run (2026-05-04)
+- `pnpm test`: passed
+- `pnpm lint`: passed
+- `pnpm typecheck`: passed
+- `pnpm build`: passed
+- Additional coverage added:
+  - `web/tests/phase10-survey-routes.test.ts`
+  - `web/tests/phase12-admin-rewards.test.ts`

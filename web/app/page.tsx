@@ -1,51 +1,81 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { NetworkGuard } from "@/components/NetworkGuard";
+import { useSurveyContract } from "@/hooks/useSurveyContract";
+import { useWallet } from "@/hooks/useWallet";
+import { useWalletAuth } from "@/hooks/useWalletAuth";
 import Link from "next/link";
 
 export default function HomePage() {
+  const { account, provider } = useWallet();
+  const { isAdmin } = useWalletAuth();
+  const contract = useSurveyContract(provider);
+  const [hasOnChainAdminRole, setHasOnChainAdminRole] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkOnChainAdmin() {
+      if (!account || !contract.contractAddress) {
+        if (!cancelled) {
+          setHasOnChainAdminRole(false);
+        }
+        return;
+      }
+
+      const onChainAdmin = await contract.hasAdminRole(account).catch(() => false);
+      if (!cancelled) {
+        setHasOnChainAdminRole(onChainAdmin);
+      }
+    }
+
+    void checkOnChainAdmin();
+    return () => {
+      cancelled = true;
+    };
+  }, [account, contract]);
+
+  const shouldShowKycCta = !(isAdmin || hasOnChainAdminRole);
+
   return (
     <NetworkGuard>
-      <div style={{ textAlign: "center", padding: "3rem 1rem" }}>
-        <h1 style={{ fontSize: "2.5rem", marginBottom: "1rem" }}>🚀 SurveyChain Rewards</h1>
-        <p style={{ fontSize: "1.2rem", color: "#666", maxWidth: "600px", margin: "0 auto 2rem" }}>
+      <div className="text-center" style={{ padding: "6rem 0" }}>
+        <h1 className="text-4xl font-bold mb-4">
+          SurveyChain Rewards
+        </h1>
+        <p className="text-xl text-muted max-w-2xl mx-auto mb-8">
           A blockchain-based escrow and proof-of-completion system for verified survey rewards.
+          Clean, transparent, and direct to your wallet.
         </p>
-        <div style={{ display: "flex", gap: "1rem", justifyContent: "center", flexWrap: "wrap" }}>
-          <Link href="/surveys" style={{
-            padding: "1rem 2rem",
-            backgroundColor: "#007bff",
-            color: "white",
-            textDecoration: "none",
-            borderRadius: "8px",
-            fontWeight: "bold",
-            fontSize: "1.1rem",
-          }}>
-            📋 Browse Surveys
+        <div className="flex gap-4 justify-center flex-wrap">
+          <Link href="/surveys" className="btn btn-primary" style={{ padding: "0.75rem 1.5rem", fontSize: "1rem" }}>
+            Browse Surveys
           </Link>
-          <Link href="/kyc" style={{
-            padding: "1rem 2rem",
-            backgroundColor: "#28a745",
-            color: "white",
-            textDecoration: "none",
-            borderRadius: "8px",
-            fontWeight: "bold",
-            fontSize: "1.1rem",
-          }}>
-            ✅ Complete KYC
-          </Link>
+
+          {shouldShowKycCta ? (
+            <Link href="/kyc" className="btn btn-secondary" style={{ padding: "0.75rem 1.5rem", fontSize: "1rem" }}>
+              Complete KYC
+            </Link>
+          ) : (
+            <Link href="/admin" className="btn btn-secondary" style={{ padding: "0.75rem 1.5rem", fontSize: "1rem" }}>
+              Admin Dashboard
+            </Link>
+          )}
         </div>
-        
-        <div style={{ marginTop: "4rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "2rem", textAlign: "left" }}>
-          <div style={{ padding: "1.5rem", backgroundColor: "#f8f9fa", borderRadius: "8px", border: "1px solid #e9ecef" }}>
-            <h3 style={{ color: "#007bff", marginTop: 0 }}>💰 Funded Escrow</h3>
-            <p style={{ margin: 0, color: "#666" }}>Creators fund reward pools before launching surveys. No payment, no survey.</p>
+
+        <div className="mt-12 grid grid-cols-3 gap-6 text-left max-w-4xl mx-auto">
+          <div className="surface">
+            <h3 className="text-lg font-semibold mb-2">Funded Escrow</h3>
+            <p className="text-muted text-sm">Creators fund reward pools before launching surveys. No payment, no survey. Smart contracts ensure fair play.</p>
           </div>
-          <div style={{ padding: "1.5rem", backgroundColor: "#f8f9fa", borderRadius: "8px", border: "1px solid #e9ecef" }}>
-            <h3 style={{ color: "#007bff", marginTop: 0 }}>🔒 Verified Rewards</h3>
-            <p style={{ margin: 0, color: "#666" }}>On-chain proofs ensure legitimate respondents get automatically rewarded.</p>
+          <div className="surface">
+            <h3 className="text-lg font-semibold mb-2">Verified Rewards</h3>
+            <p className="text-muted text-sm">On-chain proofs guarantee legitimate respondents get automatically rewarded directly to their wallets.</p>
           </div>
-          <div style={{ padding: "1.5rem", backgroundColor: "#f8f9fa", borderRadius: "8px", border: "1px solid #e9ecef" }}>
-            <h3 style={{ color: "#007bff", marginTop: 0 }}>📊 Quality Gates</h3>
-            <p style={{ margin: 0, color: "#666" }}>Off-chain validation filters out bots and low-effort responses.</p>
+          <div className="surface">
+            <h3 className="text-lg font-semibold mb-2">Quality Gates</h3>
+            <p className="text-muted text-sm">Off-chain validation filters out bots and low-effort responses, ensuring premium insights for creators.</p>
           </div>
         </div>
       </div>

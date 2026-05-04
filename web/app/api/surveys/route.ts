@@ -25,16 +25,18 @@ export async function GET(request: Request) {
     const provider = new JsonRpcProvider(rpcUrl);
     const contract = new Contract(contractAddress, SURVEY_REWARD_ABI, provider);
 
-    // Get total survey count
-    const surveyCount = await contract.surveyCount();
+    const surveyCount = Number(await contract.surveyCount());
+    if (!Number.isFinite(surveyCount) || surveyCount < 0) {
+      return NextResponse.json(
+        { error: "Invalid survey count returned by contract." },
+        { status: 500 }
+      );
+    }
 
     const surveys = [];
-    for (let i = 1; i <= surveyCount; i++) {
+    for (let i = 1; i <= surveyCount; i += 1) {
       try {
         const survey = await contract.surveys(i);
-        // Only include active surveys
-        // Note: options are stored in the contract but not exposed by the public getter
-        // They would need a separate getter function to be readable
         if (survey.active) {
           surveys.push({
             id: i,
@@ -48,11 +50,10 @@ export async function GET(request: Request) {
             escrowRemaining: survey.escrowRemaining.toString(),
             active: survey.active,
             unusedRewardsWithdrawn: survey.unusedRewardsWithdrawn,
-            options: [], // Options are stored on-chain but not readable via current getter
+            options: [],
           });
         }
       } catch (err) {
-        // Skip surveys that can't be read
         console.warn(`Could not read survey ${i}:`, err);
       }
     }

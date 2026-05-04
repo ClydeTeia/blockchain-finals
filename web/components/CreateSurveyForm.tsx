@@ -16,7 +16,7 @@ type QualityRule = {
 
 export function CreateSurveyForm() {
   const { account, provider } = useWallet();
-  const { isAuthenticated } = useWalletAuth();
+  const { isAuthenticated, isAdmin, isCreator } = useWalletAuth();
   const contract = useSurveyContract(provider);
 
   const [title, setTitle] = useState("");
@@ -95,6 +95,11 @@ export function CreateSurveyForm() {
 
     if (!isAuthenticated) {
       setError("Please sign in with your wallet first.");
+      return;
+    }
+
+    if (!(isCreator || isAdmin)) {
+      setError("Only creator or admin wallets can create surveys.");
       return;
     }
 
@@ -213,6 +218,14 @@ export function CreateSurveyForm() {
     return (
       <div style={{ padding: "1rem", border: "1px solid #ccc", borderRadius: "8px" }}>
         <p>Please sign in with your wallet to create a survey.</p>
+      </div>
+    );
+  }
+
+  if (!(isCreator || isAdmin)) {
+    return (
+      <div style={{ padding: "1rem", border: "1px solid #ccc", borderRadius: "8px" }}>
+        <p>This wallet is not authorized to create surveys.</p>
       </div>
     );
   }

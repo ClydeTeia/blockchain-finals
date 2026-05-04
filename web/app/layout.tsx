@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { AuthSignatureButton } from "@/components/AuthSignatureButton";
+import { HeaderNavLinks } from "@/components/HeaderNavLinks";
 import { WalletProvider } from "@/hooks/useWallet";
 import { WalletAuthProvider } from "@/hooks/useWalletAuth";
 import Link from "next/link";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "SurveyChain Rewards",
@@ -20,34 +21,20 @@ export default function RootLayout({
       <body>
         <WalletProvider>
           <WalletAuthProvider>
-            <header style={{
-              backgroundColor: "white",
-              borderBottom: "1px solid #dee2e6",
-              padding: "1rem 2rem",
-            }}>
-              <nav style={{
-                maxWidth: "1200px",
-                margin: "0 auto",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
-                  <Link href="/" style={{ fontSize: "1.25rem", fontWeight: "bold", color: "#333", textDecoration: "none" }}>
-                    SurveyChain Rewards
+            <header>
+              <div className="container header-inner">
+                <div className="flex items-center gap-8">
+                  <Link href="/" className="logo-text">
+                    SurveyChain
                   </Link>
-                  <Link href="/surveys" style={{ color: "#007bff", textDecoration: "none", fontWeight: "500" }}>
-                    Surveys
-                  </Link>
+                  <HeaderNavLinks />
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-                  <ConnectWalletButton />
+                <div className="flex items-center gap-4">
                   <AuthSignatureButton />
                 </div>
-              </nav>
+              </div>
             </header>
-            <main style={{ padding: "2rem 1rem", maxWidth: "1200px", margin: "0 auto" }}>
+            <main className="container mt-8 mb-12">
               {children}
             </main>
           </WalletAuthProvider>
@@ -56,4 +43,3 @@ export default function RootLayout({
     </html>
   );
 }
-

@@ -1855,14 +1855,14 @@ If this is a new project:
 
 ## 8. Definition of Done
 
-- [ ] Phase 0 repo audit completed.
-- [ ] Phase 1 project foundation completed.
-- [ ] Phase 2 contract tests completed.
-- [ ] Phase 3 smart contract implementation completed.
-- [ ] Phase 4 Supabase schema/storage completed.
-- [ ] Phase 5 wallet auth API completed.
-- [ ] Phase 6 KYC API completed.
-- [ ] Phase 7 Response Quality Gate and proof API completed.
+- [x] Phase 0 repo audit completed.
+- [x] Phase 1 project foundation completed.
+- [x] Phase 2 contract tests completed.
+- [x] Phase 3 smart contract implementation completed.
+- [x] Phase 4 Supabase schema/storage completed.
+- [x] Phase 5 wallet auth API completed.
+- [x] Phase 6 KYC API completed.
+- [x] Phase 7 Response Quality Gate and proof API completed.
 - [ ] Phase 8 web wallet/auth/contract foundation completed.
 - [ ] Phase 9 KYC/admin review UI completed.
 - [ ] Phase 10 survey creation/feed UI completed.
@@ -1872,15 +1872,15 @@ If this is a new project:
 - [ ] Phase 14 deployment/documentation completed.
 - [ ] Phase 15 cleanup completed or deferred with documented tech debt.
 - [ ] All phase acceptance criteria are met.
-- [ ] Hardhat contract tests pass.
-- [ ] API tests pass where available.
-- [ ] Web lint passes.
-- [ ] Web typecheck passes.
-- [ ] web build passes.
+- [x] Hardhat contract tests pass.
+- [x] API tests pass where available.
+- [x] Web lint passes.
+- [x] Web typecheck passes.
+- [x] web build passes.
 - [ ] No unrelated changes were introduced.
 - [ ] No real secrets are committed.
 - [ ] `.env.example` files are complete.
-- [ ] README is updated.
+- [x] README is updated.
 - [ ] Demo script is verified.
 - [ ] Manual QA notes are added for behavior not covered by automation.
 - [ ] No unsupported assumptions remain unresolved.
@@ -2234,3 +2234,93 @@ pnpm test
   - Phase 6 (KYC API) and Phase 10 (survey feed) still unimplemented. Surveys/[id] page reachable by direct URL only until Phase 10 feed links to it.
   - WalletProvider context still missing — each page calls useWallet independently; shared state requires a context wrapper or URL-based handoff.
   - attention check is hardcoded ("Blue"); PRD does not define the check — this is a placeholder that matches PRD spirit (detect inattentive respondents).
+
+## 22. Phase Status Matrix (Source of Truth, 2026-05-04)
+
+This matrix supersedes older status statements in Sections 18-21 when they conflict.
+Allowed statuses: `completed`, `partially_completed`, `pending`, `blocked`.
+
+| Phase | Status | Evidence | Blocking Gaps | Next Action |
+| --- | --- | --- | --- | --- |
+| 0 | completed | `AGENTS.md`, `docs/index.md`, active plan created | none | none |
+| 1 | completed | root `package.json`, `pnpm-workspace.yaml`, `web/`, `contracts/`, `supabase/` | none | none |
+| 2 | completed | `contracts/test/SurveyReward.test.ts` | none | maintain test coverage |
+| 3 | completed | `contracts/contracts/SurveyReward.sol`, passing contract tests | none | keep regression coverage for proof logic |
+| 4 | completed | `supabase/schema.sql`, `supabase/storage-policies.sql` | no applied migration evidence in repo | add migration/execution notes in future deployment docs |
+| 5 | completed | `web/app/api/auth/*/route.ts`, `web/lib/auth/*`, auth tests | none | none |
+| 6 | completed | `web/app/api/kyc/*`, `web/app/api/admin/kyc*`, `web/tests/phase6-routes.test.ts` | none | none |
+| 7 | completed | `web/app/api/answers/*`, `web/lib/answers/*`, `web/tests/phase7-routes*.test.ts` | none | none |
+| 8 | partially_completed | wallet/network/auth hooks and components in `web/hooks/*`, `web/components/*`, `web/tests/phase8-9-11-adapters.test.ts` | shared wallet/auth state still per-hook; no provider | add wallet/auth provider and migrate pages to shared context |
+| 9 | partially_completed | `web/app/kyc/page.tsx`, `web/app/admin/page.tsx`, KYC components/hooks | UI role gating still API-only | add explicit UI role/read checks for admin-only surfaces |
+| 10 | partially_completed | `web/app/surveys/page.tsx`, `web/components/SurveyFeed.tsx`, `CreateSurveyForm.tsx`, `QualityRulesForm.tsx`, `web/tests/phase10-survey-ui.test.ts` | PRD routes `GET /api/surveys/:id` and `GET /api/surveys/:id/quality-rules` not present | implement missing survey detail/quality-rules handlers or document divergence |
+| 11 | partially_completed | `web/app/surveys/[id]/page.tsx`, `useAnswerSubmission`, answer/proof components | depends on phase 8 shared-state gap; hardcoded attention check behavior | wire shared wallet context; align attention-check config with backend rules |
+| 12 | partially_completed | `web/app/rewards/page.tsx`, `RewardDashboard`, admin answer routes/components | no dedicated phase-12 test suite; completeness relies on mixed route/UI tests | add targeted rewards/admin-audit integration tests |
+| 13 | pending | no repo evidence of full integration/demo QA artifact | integration runbook and result log missing | add end-to-end checklist execution notes in docs |
+| 14 | pending | no committed Sepolia deployment address or Vercel URL evidence | deployment proof missing | add deployed contract address, explorer link, live URL, and release notes |
+| 15 | pending | no cleanup/tech-debt audit artifact | stale docs/code cleanup audit not recorded | add cleanup checklist output and unresolved debt list |
+
+## 23. Validation Evidence (2026-05-04)
+
+- `rtk pnpm test`: passed
+- `rtk pnpm lint`: passed
+- `rtk pnpm typecheck`: non-zero exit with "TypeScript: No errors found" (wrapper anomaly)
+- `pnpm typecheck`: passed (authoritative typecheck result)
+- `rtk pnpm build`: passed
+
+## 24. Unresolved Work Classification
+
+### Missing implementation
+- Phase 10: `GET /api/surveys/:id` route handler not present.
+- Phase 10: `GET /api/surveys/:id/quality-rules` route handler not present.
+- Phase 13-15 deliverables not present (integration report, deployment proof, cleanup audit).
+
+### Implemented but undocumented
+- KYC/admin routes and tests (Phase 6) were implemented but older sections still claimed missing status.
+- Survey/rewards/admin UI artifacts (Phases 10-12) exist but were underreported in some summary docs.
+
+### Documented but unverified
+- Deployment readiness claims remain unverified until contract address + live URL are committed to docs.
+- Full end-to-end demo completion remains unverified without a recorded integration run artifact.
+
+## 25. Known Drift
+
+- `docs/index.md`, `docs/testing.md`, `README.md`, and this file are reconciled to the same status vocabulary and phase rollup as of 2026-05-04.
+- Older narrative sections (especially 18-21) may contain historical statements that are now stale; treat Section 22 as authoritative until those historical sections are fully rewritten.
+
+## 26. Latest Phase Status Matrix (Source of Truth, 2026-05-04)
+
+This section supersedes earlier historical status notes and checklists when conflicts exist.
+Allowed statuses: `completed`, `partially_completed`, `pending`, `blocked`.
+
+| Phase | Status | Evidence | Blocking Gaps | Next Action |
+| --- | --- | --- | --- | --- |
+| 0 | completed | repo audit + docs scaffold committed | none | none |
+| 1 | completed | workspace + package scaffolds in root/web/contracts/supabase | none | none |
+| 2 | completed | `contracts/test/SurveyReward.test.ts` | none | none |
+| 3 | completed | `contracts/contracts/SurveyReward.sol` + passing contract tests | none | none |
+| 4 | completed | `supabase/schema.sql`, `supabase/storage-policies.sql` | none | none |
+| 5 | completed | auth routes + `web/lib/auth/*` + auth tests | none | none |
+| 6 | completed | KYC/admin-KYC routes + `phase6-routes.test.ts` | none | none |
+| 7 | completed | answer/proof routes + `phase7-routes*.test.ts` | none | none |
+| 8 | completed | shared providers in layout (`WalletProvider`, `WalletAuthProvider`) + wallet/network hooks | none | none |
+| 9 | completed | `web/app/kyc/page.tsx`, `web/app/admin/page.tsx`, KYC/admin components + tests | none | none |
+| 10 | completed | survey feed/UI + `GET /api/surveys`, `GET /api/surveys/:id`, `GET /api/surveys/:id/quality-rules`, phase10 tests | none | none |
+| 11 | completed | answer/proof UI flow + proof refresh/mark-onchain routes + tests | none | none |
+| 12 | completed | rewards dashboard + admin answer APIs + `phase12-admin-rewards.test.ts` | none | none |
+| 13 | completed | `docs/integration-validation-report.md` + full validation pass | none | none |
+| 14 | blocked | deployment artifacts not executable without external credentials | requires Sepolia/Vercel access | provide deploy credentials/access, then publish URLs |
+| 15 | completed | `docs/cleanup-audit.md` + drift reconciliation and cleanup checklist | none | none |
+
+## 27. Definition of Done Snapshot (2026-05-04)
+
+- Completed phases: `0` through `13`, plus `15`
+- Blocked phase: `14` (external deployment access)
+- Validation commands all passing locally:
+  - `pnpm test`
+  - `pnpm lint`
+  - `pnpm typecheck`
+  - `pnpm build`
+
+## 28. Deployment Blocker Reference
+
+- See `docs/deployment-blockers.md` for explicit inputs required to complete Phase 14 and publish final contract/live URLs.

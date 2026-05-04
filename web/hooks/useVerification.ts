@@ -88,8 +88,9 @@ export function useVerification(
           body: formData,
         });
         if (!res.ok) {
-          const err = (await res.json()) as { error?: string };
-          throw new Error(err.error ?? "KYC submission failed.");
+          const err = (await res.json()) as { error?: string; detail?: string };
+          const message = [err.error, err.detail].filter(Boolean).join(" ");
+          throw new Error(message || `KYC submission failed (HTTP ${res.status}).`);
         }
         const data = (await res.json()) as KycSubmitResponse;
         setKycStatus("pending");

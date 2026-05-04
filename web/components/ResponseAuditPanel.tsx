@@ -18,7 +18,7 @@ export function ResponseAuditPanel() {
     const fetchAnswers = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch('/api/admin/answers'); // We need to create this endpoint
+        const response = await fetch('/api/admin/answers');
         if (!response.ok) {
           throw new Error('Failed to fetch answers');
         }

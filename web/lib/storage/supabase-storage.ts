@@ -23,32 +23,110 @@ function storageHeaders(config: SupabaseStorageConfig): HeadersInit {
   };
 }
 
+async function createBucketIfMissing(
+  config: SupabaseStorageConfig,
+  bucket: string
+): Promise<boolean> {
+  const response = await fetch(`${config.url}/storage/v1/bucket`, {
+    method: "POST",
+    headers: {
+      ...storageHeaders(config),
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      id: bucket,
+      name: bucket,
+      public: false
+    }),
+    cache: "no-store"
+  });
+
+  if (response.ok) {
+    return true;
+  }
+
+  return response.status === 409;
+}
+
 export async function uploadPrivateObject(input: {
   bucket: string;
   objectPath: string;
   contentType: string;
   data: Uint8Array;
 }): Promise<boolean> {
+  const result = await uploadPrivateObjectDetailed(input);
+  return result.ok;
+}
+
+export async function uploadPrivateObjectDetailed(input: {
+  bucket: string;
+  objectPath: string;
+  contentType: string;
+  data: Uint8Array;
+}): Promise<{ ok: boolean; status: number; error: string | null }> {
   const config = getStorageConfig();
   if (!config) {
-    return isExplicitTestMode();
+    return {
+      ok: isExplicitTestMode(),
+      status: isExplicitTestMode() ? 200 : 503,
+      error: isExplicitTestMode() ? null : "Supabase storage is not configured."
+    };
   }
 
-  const response = await fetch(
-    `${config.url}/storage/v1/object/${input.bucket}/${input.objectPath}`,
-    {
-      method: "POST",
-      headers: {
-        ...storageHeaders(config),
-        "x-upsert": "false",
-        "content-type": input.contentType
-      },
-      body: input.data,
-      cache: "no-store"
-    }
-  );
+  const upload = async () =>
+    fetch(
+      `${config.url}/storage/v1/object/${input.bucket}/${input.objectPath}`,
+      {
+        method: "POST",
+        headers: {
+          ...storageHeaders(config),
+          "x-upsert": "false",
+          "content-type": input.contentType
+        },
+        body: input.data,
+        cache: "no-store"
+      }
+    );
 
-  return response.ok;
+  let response = await upload();
+
+  if (!response.ok && response.status === 404) {
+    const body = await response.text().catch(() => "");
+    if (body.toLowerCase().includes("bucket not found")) {
+      const created = await createBucketIfMissing(config, input.bucket);
+      if (created) {
+        response = await upload();
+      } else {
+        response = new Response(body, { status: 404 });
+      }
+    }
+  }
+
+  if (response.ok) {
+    return { ok: true, status: response.status, error: null };
+  }
+
+  let detail: string | null = null;
+  try {
+    const text = await response.text();
+    detail = text.trim() || null;
+  } catch {
+    detail = null;
+  }
+
+  return {
+    ok: false,
+    status: response.status,
+    error: detail
+  };
+}
+
+export function isSupabaseStorageConfigured(): boolean {
+  return getStorageConfig() !== null;
+}
+
+export function isSupabaseStorageTestMode(): boolean {
+  return isExplicitTestMode();
 }
 
 export async function createSignedObjectUrl(input: {

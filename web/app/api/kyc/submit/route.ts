@@ -6,7 +6,11 @@ import { requireSession } from "@/lib/auth/require-session";
 import { createKycRequest } from "@/lib/kyc/data-store";
 import { buildKycProofHash, sha256Hex } from "@/lib/kyc/hash";
 import { extensionForMimeType, validateKycImageFile } from "@/lib/kyc/validation";
-import { uploadPrivateObject } from "@/lib/storage/supabase-storage";
+import {
+  isSupabaseStorageConfigured,
+  isSupabaseStorageTestMode,
+  uploadPrivateObjectDetailed
+} from "@/lib/storage/supabase-storage";
 
 const KYC_BUCKET = "kyc-documents";
 
@@ -54,24 +58,50 @@ export async function POST(request: Request) {
   const documentPath = `${requestId}/document-${documentHash.slice(0, 12)}.${documentExt}`;
   const selfiePath = `${requestId}/selfie-${selfieHash.slice(0, 12)}.${selfieExt}`;
 
-  const documentUploaded = await uploadPrivateObject({
+  if (!isSupabaseStorageConfigured() && !isSupabaseStorageTestMode()) {
+    return NextResponse.json(
+      {
+        error:
+          "KYC storage is not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the server."
+      },
+      { status: 503 }
+    );
+  }
+
+  const documentUpload = await uploadPrivateObjectDetailed({
     bucket: KYC_BUCKET,
     objectPath: documentPath,
     contentType: documentFile.type,
     data: documentBytes
   });
-  if (!documentUploaded) {
-    return NextResponse.json({ error: "Failed to upload document image." }, { status: 500 });
+  if (!documentUpload.ok) {
+    return NextResponse.json(
+      {
+        error: "Failed to upload document image.",
+        detail:
+          documentUpload.error ??
+          `Supabase storage request failed with status ${documentUpload.status}.`
+      },
+      { status: 500 }
+    );
   }
 
-  const selfieUploaded = await uploadPrivateObject({
+  const selfieUpload = await uploadPrivateObjectDetailed({
     bucket: KYC_BUCKET,
     objectPath: selfiePath,
     contentType: selfieFile.type,
     data: selfieBytes
   });
-  if (!selfieUploaded) {
-    return NextResponse.json({ error: "Failed to upload selfie image." }, { status: 500 });
+  if (!selfieUpload.ok) {
+    return NextResponse.json(
+      {
+        error: "Failed to upload selfie image.",
+        detail:
+          selfieUpload.error ??
+          `Supabase storage request failed with status ${selfieUpload.status}.`
+      },
+      { status: 500 }
+    );
   }
 
   const proofHash = buildKycProofHash({
@@ -93,14 +123,23 @@ export async function POST(request: Request) {
       proofHash
     });
   } catch (error) {
-    const typedError = error as { code?: string } | undefined;
+    const typedError = error as { code?: string; message?: string } | undefined;
     if (typedError?.code === "DUPLICATE_KYC_HASH") {
       return NextResponse.json(
         { error: "A matching document or selfie image already exists." },
         { status: 409 }
       );
     }
-    return NextResponse.json({ error: "Unable to create KYC request." }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "Unable to create KYC request.",
+        detail:
+          typedError?.message ??
+          typedError?.code ??
+          "Unknown persistence error while creating KYC request."
+      },
+      { status: 500 }
+    );
   }
 
   try {

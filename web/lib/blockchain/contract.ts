@@ -1,4 +1,7 @@
 export const SURVEY_REWARD_ABI = [
+  "function ADMIN_ROLE() view returns (bytes32)",
+  "function hasRole(bytes32 role, address account) view returns (bool)",
+  "function surveyCount() view returns (uint256)",
   "function isVerified(address wallet) view returns (bool)",
   "function claimableRewards(address) view returns (uint256)",
   "function totalEarned(address) view returns (uint256)",
@@ -42,7 +45,7 @@ export function toSurveySummary(
 export const SEPOLIA_CHAIN_ID = 11155111;
 
 export function getContractAddress(): string | null {
-  return process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? null;
+  return process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? process.env.CONTRACT_ADDRESS ?? null;
 }
 
 export function getExpectedChainId(): number {

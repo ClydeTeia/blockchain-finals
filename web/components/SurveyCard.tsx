@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useWallet } from "@/hooks/useWallet";
+import { useWalletAuth } from "@/hooks/useWalletAuth";
 import { useSurveyContract } from "@/hooks/useSurveyContract";
 import { ethers } from "ethers";
 import Link from "next/link";
@@ -24,9 +25,11 @@ type SurveyCardProps = {
 
 export function SurveyCard({ survey, onAnswerClick }: SurveyCardProps) {
   const { account } = useWallet();
+  const { isAdmin } = useWalletAuth();
   const contract = useSurveyContract(null);
   const [hasSubmitted, setHasSubmitted] = useState<boolean | null>(null);
   const [isVerified, setIsVerified] = useState<boolean | null>(null);
+  const [hasOnChainAdminRole, setHasOnChainAdminRole] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -38,12 +41,14 @@ export function SurveyCard({ survey, onAnswerClick }: SurveyCardProps) {
     async function checkStatus() {
       try {
         setLoading(true);
-        const [submitted, verified] = await Promise.all([
+        const [submitted, verified, onChainAdmin] = await Promise.all([
           contract.hasSubmitted(survey.id, account as string).catch(() => false),
           contract.isVerified(account as string).catch(() => false),
+          contract.hasAdminRole(account as string).catch(() => false),
         ]);
         setHasSubmitted(submitted);
         setIsVerified(verified);
+        setHasOnChainAdminRole(onChainAdmin);
       } catch (err) {
         console.warn("Could not check survey status:", err);
       } finally {
@@ -64,173 +69,107 @@ export function SurveyCard({ survey, onAnswerClick }: SurveyCardProps) {
 
   const isFull = responseCountNum >= maxResponsesNum;
   const isCreator = account?.toLowerCase() === survey.creator.toLowerCase();
+  const canAnswerWithoutKyc = isAdmin || hasOnChainAdminRole;
+  const isEligibleToAnswer = Boolean(isVerified) || canAnswerWithoutKyc;
 
   return (
-    <div style={{
-      border: "1px solid #ddd",
-      borderRadius: "8px",
-      padding: "1.5rem",
-      backgroundColor: "white",
-      boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-    }}>
-      <div style={{ marginBottom: "1rem" }}>
-        <span style={{
-          display: "inline-block",
-          padding: "0.25rem 0.75rem",
-          fontSize: "0.75rem",
-          fontWeight: "bold",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
-          backgroundColor: survey.active ? "#d4edda" : "#f8d7da",
-          color: survey.active ? "#155724" : "#721c24",
-          borderRadius: "4px",
-        }}>
+    <div className="glass-card flex flex-col gap-4">
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`badge ${survey.active ? "badge-success" : "badge-danger"}`}>
           {survey.active ? "Active" : "Closed"}
         </span>
         {isCreator && (
-          <span style={{
-            display: "inline-block",
-            marginLeft: "0.5rem",
-            padding: "0.25rem 0.75rem",
-            fontSize: "0.75rem",
-            fontWeight: "bold",
-            backgroundColor: "#cce5ff",
-            color: "#004085",
-            borderRadius: "4px",
-          }}
-          >
+          <span className="badge badge-primary">
             Your Survey
           </span>
         )}
       </div>
 
-      <h3 style={{ margin: "0 0 0.5rem 0", fontSize: "1.25rem", color: "#333" }}>
-        {survey.title}
-      </h3>
-      <p style={{ margin: "0 0 1rem 0", color: "#666", fontSize: "0.95rem" }}>
-        {survey.description}
-      </p>
+      <h3 className="text-xl font-bold m-0">{survey.title}</h3>
+      <p className="text-muted text-sm m-0">{survey.description}</p>
 
-      <div style={{ marginBottom: "1rem", padding: "1rem", backgroundColor: "#f8f9fa", borderRadius: "4px" }}>
-        <h4 style={{ margin: "0 0 0.75rem 0", fontSize: "1rem", color: "#495057" }}>
-          Question:
-        </h4>
-        <p style={{ margin: 0, fontSize: "1rem", color: "#212529" }}>
-          {survey.question}
-        </p>
+      <div className="mt-4 mb-4 p-4 rounded-xl border border-white/10 bg-white/5">
+        <h4 className="text-sm font-semibold text-muted mb-2 uppercase tracking-wide">Question:</h4>
+        <p className="text-lg font-medium">{survey.question}</p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "1rem", marginBottom: "1rem" }}>
+      <div className="grid grid-cols-3 gap-4 mb-4">
         <div>
-          <p style={{ margin: 0, fontSize: "0.75rem", color: "#6c757d", textTransform: "uppercase" }}>Reward per Response</p>
-          <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.25rem", fontWeight: "bold", color: "#28a745" }}>
-            {rewardPerResponseEth} ETH
-          </p>
+          <p className="text-xs text-muted uppercase tracking-wider mb-1">Reward</p>
+          <p className="text-lg font-bold text-success">{rewardPerResponseEth} ETH</p>
         </div>
         <div>
-          <p style={{ margin: 0, fontSize: "0.75rem", color: "#6c757d", textTransform: "uppercase" }}>Responses / Max</p>
-          <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.25rem", fontWeight: "bold" }}>
-            {responseCountNum} / {maxResponsesNum}
-          </p>
+          <p className="text-xs text-muted uppercase tracking-wider mb-1">Responses</p>
+          <p className="text-lg font-bold">{responseCountNum} / {maxResponsesNum}</p>
         </div>
         <div>
-          <p style={{ margin: 0, fontSize: "0.75rem", color: "#6c757d", textTransform: "uppercase" }}>Escrow Remaining</p>
-          <p style={{ margin: "0.25rem 0 0 0", fontSize: "1.25rem", fontWeight: "bold", color: "#6f42c1" }}>
-            {escrowRemainingEth} ETH
-          </p>
+          <p className="text-xs text-muted uppercase tracking-wider mb-1">Escrow</p>
+          <p className="text-lg font-bold text-primary">{escrowRemainingEth} ETH</p>
         </div>
       </div>
 
-      <div style={{ marginBottom: "1rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", fontSize: "0.875rem" }}>
+      <div className="mb-4">
+        <div className="flex justify-between text-sm text-muted mb-2">
           <span>Progress</span>
-          <span>{Math.round(progressPercent)}%</span>
+          <span className="font-mono">{Math.round(progressPercent)}%</span>
         </div>
-        <div style={{
-          width: "100%",
-          height: "8px",
-          backgroundColor: "#e9ecef",
-          borderRadius: "4px",
-          overflow: "hidden",
-        }}>
-          <div style={{
-            width: `${progressPercent}%`,
-            height: "100%",
-            backgroundColor: progressPercent > 80 ? "#dc3545" : progressPercent > 50 ? "#ffc107" : "#28a745",
-            transition: "width 0.3s ease",
-          }} />
+        <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+          <div 
+            className="h-full rounded-full transition-all duration-500 ease-out"
+            style={{ 
+              width: `${progressPercent}%`,
+              backgroundColor: progressPercent > 80 ? 'var(--danger)' : progressPercent > 50 ? 'var(--warning)' : 'var(--success)'
+            }}
+          />
         </div>
       </div>
 
       {!contract.contractAddress && (
-        <div style={{ padding: "1rem", backgroundColor: "#fff3cd", border: "1px solid #ffeaa7", borderRadius: "4px", marginBottom: "1rem" }}>
-          <p style={{ margin: 0, fontSize: "0.875rem", color: "#856404" }}>
-            Contract not configured
-          </p>
+        <div className="p-3 bg-warning/20 border border-warning/30 rounded-lg text-warning text-sm font-medium text-center">
+          Contract not configured
         </div>
       )}
 
       {isFull && (
-        <div style={{ padding: "1rem", backgroundColor: "#f8d7da", border: "1px solid #f5c6cb", borderRadius: "4px", marginBottom: "1rem" }}>
-          <p style={{ margin: 0, fontSize: "0.875rem", color: "#721c24" }}>
-            This survey is full. No more responses are being accepted.
-          </p>
+        <div className="p-3 bg-danger/20 border border-danger/30 rounded-lg text-danger text-sm font-medium text-center">
+          This survey is full. No more responses are being accepted.
         </div>
       )}
 
       {loading && (
-        <div style={{ padding: "1rem", textAlign: "center" }}>
-          <p style={{ margin: 0, color: "#666" }}>Checking your eligibility...</p>
+        <div className="p-3 text-center text-muted text-sm flex items-center justify-center gap-2">
+           <svg className="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Checking your eligibility...
         </div>
       )}
 
        {!loading && account && !isCreator && !isFull && survey.active && (
-        <div style={{ marginBottom: "1rem" }}>
-          {isVerified === false && (
-            <div style={{ padding: "1rem", backgroundColor: "#fff3cd", border: "1px solid #ffeaa7", borderRadius: "4px", marginBottom: "0.5rem" }}>
-              <p style={{ margin: 0, fontSize: "0.875rem", color: "#856404" }}>
-                ⚠️ You need to complete KYC verification to participate in reward surveys.
-              </p>
+        <div className="mt-2">
+          {isVerified === false && !canAnswerWithoutKyc && (
+            <div className="p-3 mb-3 bg-warning/20 border border-warning/30 rounded-lg text-warning text-sm font-medium">
+              ⚠️ You need to complete KYC verification to participate in reward surveys.
             </div>
           )}
           {hasSubmitted && (
-            <div style={{ padding: "1rem", backgroundColor: "#d1ecf1", border: "1px solid #bee5eb", borderRadius: "4px", marginBottom: "0.5rem" }}>
-              <p style={{ margin: 0, fontSize: "0.875rem", color: "#0c5460" }}>
-                ✅ You have already submitted a response to this survey.
-              </p>
+            <div className="p-3 mb-3 bg-success/20 border border-success/30 rounded-lg text-success text-sm font-medium">
+              ✅ You have already submitted a response to this survey.
             </div>
           )}
-          {!hasSubmitted && isVerified && onAnswerClick && (
+          {!hasSubmitted && isEligibleToAnswer && onAnswerClick && (
             <button
               onClick={() => onAnswerClick(survey.id)}
-              style={{
-                width: "100%",
-                padding: "0.75rem",
-                fontSize: "1rem",
-                fontWeight: "bold",
-                backgroundColor: "#007bff",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-              }}
+              className="btn btn-primary w-full"
             >
               Answer Survey
             </button>
           )}
-          {!hasSubmitted && !isVerified && onAnswerClick && (
+          {!hasSubmitted && !isEligibleToAnswer && onAnswerClick && (
             <button
               disabled
-              style={{
-                width: "100%",
-                padding: "0.75rem",
-                fontSize: "1rem",
-                backgroundColor: "#ccc",
-                color: "#666",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "not-allowed",
-              }}
+              className="btn btn-secondary w-full"
             >
               Complete KYC to Answer
             </button>
@@ -239,20 +178,14 @@ export function SurveyCard({ survey, onAnswerClick }: SurveyCardProps) {
       )}
 
       {!account && !isCreator && (
-        <div style={{ padding: "1rem", backgroundColor: "#e2e3e5", border: "1px solid #d6d8db", borderRadius: "4px" }}>
-          <p style={{ margin: 0, fontSize: "0.875rem", color: "#383d41" }}>
-            Connect your wallet to participate.
-          </p>
+        <div className="p-3 bg-white/5 border border-white/10 rounded-lg text-muted text-sm text-center">
+          Connect your wallet to participate.
         </div>
       )}
 
-      <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid #eee", fontSize: "0.75rem", color: "#999" }}>
-        <p style={{ margin: 0, wordBreak: "break-all" }}>
-          Creator: {survey.creator.slice(0, 6)}...{survey.creator.slice(-4)}
-        </p>
-        <p style={{ margin: "0.25rem 0 0 0" }}>
-          Survey ID: {survey.id}
-        </p>
+      <div className="mt-6 pt-4 border-t border-white/10 text-xs text-muted flex justify-between">
+        <span className="font-mono">Creator: {survey.creator.slice(0, 6)}...{survey.creator.slice(-4)}</span>
+        <span className="font-mono">ID: {survey.id}</span>
       </div>
     </div>
   );

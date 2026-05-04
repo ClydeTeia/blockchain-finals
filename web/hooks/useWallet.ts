@@ -15,6 +15,19 @@ export type WalletState = {
 
 const WalletContext = createContext<WalletState | null>(null);
 
+function isUserRejectedWalletAction(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const err = error as { code?: string | number; message?: string };
+  return (
+    err.code === "ACTION_REJECTED" ||
+    err.code === 4001 ||
+    err.message?.toLowerCase().includes("user rejected") === true
+  );
+}
+
 function useWalletState(): WalletState {
   const [account, setAccount] = useState<string | null>(null);
   const [provider, setProvider] = useState<BrowserProvider | null>(null);
@@ -62,7 +75,9 @@ function useWalletState(): WalletState {
       setAccount(accounts[0]);
       setProvider(new BrowserProvider(window.ethereum));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Wallet connection failed.");
+      if (!isUserRejectedWalletAction(e)) {
+        setError(e instanceof Error ? e.message : "Wallet connection failed.");
+      }
     } finally {
       setIsConnecting(false);
     }

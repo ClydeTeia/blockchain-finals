@@ -1,4 +1,6 @@
-import { supabaseInsert } from "@/lib/storage/supabase-rest";
+﻿import { randomUUID } from "node:crypto";
+import { getDb, hasDatabaseConfig } from "@/lib/db/client";
+import { auditLogs } from "@/lib/db/schema";
 
 type AuditInput = {
   actorWallet: string | null;
@@ -15,22 +17,32 @@ function isExplicitTestMode(): boolean {
 }
 
 export async function logAuditEvent(input: AuditInput): Promise<void> {
-  const inserted = await supabaseInsert("audit_logs", {
-    actor_wallet: input.actorWallet,
-    action: input.action,
-    entity_type: input.entityType,
-    entity_id: input.entityId,
-    details: input.details ?? {}
-  });
-
-  if (!inserted) {
-    if (isExplicitTestMode()) {
-      memoryAuditLogs.push(input);
-      return;
+  if (hasDatabaseConfig()) {
+    const db = getDb();
+    if (db) {
+      try {
+        await db.insert(auditLogs).values({
+          id: randomUUID(),
+          actorWallet: input.actorWallet,
+          action: input.action,
+          entityType: input.entityType,
+          entityId: input.entityId,
+          details: input.details ?? {},
+          createdAt: new Date()
+        });
+        return;
+      } catch {
+        // fallback below
+      }
     }
-
-    throw new Error("Audit log persistence failed.");
   }
+
+  if (isExplicitTestMode()) {
+    memoryAuditLogs.push(input);
+    return;
+  }
+
+  throw new Error("Audit log persistence failed.");
 }
 
 export function resetAuditLogsForTests(): void {
