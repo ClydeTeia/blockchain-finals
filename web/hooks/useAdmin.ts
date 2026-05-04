@@ -12,6 +12,8 @@ export type AdminState = {
   getSignedUrls: (requestId: string) => Promise<SignedUrlsResponse | null>;
   approveKyc: (requestId: string) => Promise<boolean>;
   rejectKyc: (requestId: string, reason: string) => Promise<boolean>;
+  flagAnswer: (answerId: string) => Promise<boolean>;
+  addAuditNote: (answerId: string, note: string) => Promise<boolean>;
 };
 
 export function useAdmin(): AdminState {
@@ -115,6 +117,56 @@ export function useAdmin(): AdminState {
     [fetchKycRequests]
   );
 
+  const flagAnswer = useCallback(
+    async (answerId: string): Promise<boolean> => {
+      setIsActing(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/admin/answers/${answerId}/flag`, {
+          method: "POST",
+        });
+        if (!res.ok) {
+          const err = (await res.json()) as { error?: string };
+          throw new Error(err.error ?? "Flagging failed.");
+        }
+        return true;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Flagging failed.";
+        setError(msg);
+        return false;
+      } finally {
+        setIsActing(false);
+      }
+    },
+    []
+  );
+
+  const addAuditNote = useCallback(
+    async (answerId: string, note: string): Promise<boolean> => {
+      setIsActing(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/admin/answers/${answerId}/audit-note`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ auditNote: note }),
+        });
+        if (!res.ok) {
+          const err = (await res.json()) as { error?: string };
+          throw new Error(err.error ?? "Adding audit note failed.");
+        }
+        return true;
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Adding audit note failed.";
+        setError(msg);
+        return false;
+      } finally {
+        setIsActing(false);
+      }
+    },
+    []
+  );
+
   return {
     kycRequests,
     isLoading,
@@ -124,5 +176,7 @@ export function useAdmin(): AdminState {
     getSignedUrls,
     approveKyc,
     rejectKyc,
+    flagAnswer,
+    addAuditNote,
   };
 }

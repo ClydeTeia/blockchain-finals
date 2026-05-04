@@ -3,6 +3,7 @@ import { ConnectWalletButton } from "@/components/ConnectWalletButton";
 import { AuthSignatureButton } from "@/components/AuthSignatureButton";
 import { WalletProvider } from "@/hooks/useWallet";
 import { WalletAuthProvider } from "@/hooks/useWalletAuth";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "SurveyChain Rewards",
@@ -11,25 +12,48 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{ children: React.ReactNode }>) {
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html lang="en">
       <body>
         <WalletProvider>
           <WalletAuthProvider>
-            <header>
-              <nav>
-                <span>SurveyChain Rewards</span>
-                <div>
+            <header style={{
+              backgroundColor: "white",
+              borderBottom: "1px solid #dee2e6",
+              padding: "1rem 2rem",
+            }}>
+              <nav style={{
+                maxWidth: "1200px",
+                margin: "0 auto",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
+                  <Link href="/" style={{ fontSize: "1.25rem", fontWeight: "bold", color: "#333", textDecoration: "none" }}>
+                    SurveyChain Rewards
+                  </Link>
+                  <Link href="/surveys" style={{ color: "#007bff", textDecoration: "none", fontWeight: "500" }}>
+                    Surveys
+                  </Link>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
                   <ConnectWalletButton />
                   <AuthSignatureButton />
                 </div>
               </nav>
             </header>
-            <main>{children}</main>
+            <main style={{ padding: "2rem 1rem", maxWidth: "1200px", margin: "0 auto" }}>
+              {children}
+            </main>
           </WalletAuthProvider>
         </WalletProvider>
       </body>
     </html>
   );
 }
+

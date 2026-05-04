@@ -9,5 +9,8 @@
     "build": "pnpm -r --if-present build",
     "test": "pnpm -r --if-present test",
     "coverage": "pnpm -r --if-present coverage"
+  },
+  "dependencies": {
+    "surveychain-rewards": "file:"
   }
 }

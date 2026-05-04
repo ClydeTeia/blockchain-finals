@@ -11,6 +11,7 @@ export const SURVEY_REWARD_ABI = [
   "event RewardsClaimed(address indexed respondent, uint256 amount)",
   "event ResponseSubmitted(uint256 indexed surveyId, address indexed respondent, bytes32 indexed answerHash, uint256 rewardAmount, uint256 nonce)",
   "event VerificationRequested(address indexed wallet, bytes32 indexed proofHash)",
+  "event SurveyCreated(uint256 indexed surveyId, address indexed creator, uint256 rewardPerResponse, uint256 maxResponses, uint256 escrowAmount)"
 ] as const;
 
 export type SurveyStruct = {
