@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import { Contract, JsonRpcProvider } from "ethers";
 import { SURVEY_REWARD_ABI } from "@/lib/blockchain/contract";
 import { getContractAddress } from "@/lib/blockchain/contract";
 import { getDb, hasDatabaseConfig } from "@/lib/db/client";
-import { surveyQuestionSets } from "@/lib/db/schema";
+import { surveyQuestionSets, surveyAnswers } from "@/lib/db/schema";
 import { sanitizeSurveyQuestions } from "@/lib/surveys/questions";
 
 function isMissingQuestionSetTableError(error: unknown): boolean {
@@ -74,6 +74,8 @@ export async function GET(request: Request) {
     }
 
     let questionSetBySurveyId = new Map<number, unknown>();
+    let offChainCountBySurveyId = new Map<number, number>();
+    let pendingOnChainBySurveyId = new Map<number, number>();
     if (hasDatabaseConfig()) {
       const db = getDb();
       if (db && surveys.length > 0) {
@@ -94,6 +96,35 @@ export async function GET(request: Request) {
             console.warn("Failed loading question sets; falling back to on-chain question only.", error);
           }
         }
+
+        // Count off-chain answers (all statuses) and pending on-chain answers per survey
+        try {
+          const surveyIds = surveys.map((survey) => survey.id);
+          const answerCountRows = await db
+            .select({
+              surveyId: surveyAnswers.surveyId,
+              count: sql<number>`count(*)::int`,
+            })
+            .from(surveyAnswers)
+            .where(inArray(surveyAnswers.surveyId, surveyIds))
+            .groupBy(surveyAnswers.surveyId);
+          offChainCountBySurveyId = new Map(answerCountRows.map((row) => [row.surveyId, row.count]));
+
+          // Count only pending_onchain status
+          const pendingOnChainRows = await db
+            .select({
+              surveyId: surveyAnswers.surveyId,
+              count: sql<number>`count(*)::int`,
+            })
+            .from(surveyAnswers)
+            .where(
+              sql`${surveyAnswers.surveyId} = ANY(${surveyIds}) AND ${surveyAnswers.status} = 'pending_onchain'`
+            )
+            .groupBy(surveyAnswers.surveyId);
+          pendingOnChainBySurveyId = new Map(pendingOnChainRows.map((row) => [row.surveyId, row.count]));
+        } catch (error) {
+          console.warn("Failed loading off-chain answer counts.", error);
+        }
       }
     }
 
@@ -111,6 +142,8 @@ export async function GET(request: Request) {
         ];
         return {
           ...survey,
+          offChainResponseCount: (offChainCountBySurveyId.get(survey.id) ?? 0).toString(),
+          pendingOnChainCount: (pendingOnChainBySurveyId.get(survey.id) ?? 0).toString(),
           questions: questionSet.length > 0 ? questionSet : fallback,
           questionSetPersisted: questionSet.length > 0
         };

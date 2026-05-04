@@ -11,6 +11,8 @@ export type SurveySummary = {
   rewardPerResponse: string;
   maxResponses: string;
   responseCount: string;
+  offChainResponseCount?: string;
+  pendingOnChainCount?: string;
   escrowRemaining: string;
   active: boolean;
   unusedRewardsWithdrawn: boolean;

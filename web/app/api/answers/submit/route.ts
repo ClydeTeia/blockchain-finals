@@ -18,6 +18,7 @@ import { evaluateQualityGate } from "@/lib/answers/quality-gate";
 import { isAdminWallet } from "@/lib/auth/admin";
 import { requireSession } from "@/lib/auth/require-session";
 import { isWalletAdminOnChain, isWalletVerified } from "@/lib/blockchain/verification";
+import { syncOnChainApproval } from "@/lib/blockchain/sync-verification";
 
 type SubmitRequest = {
   surveyId?: string;
@@ -93,6 +94,21 @@ export async function POST(request: Request) {
       { error: "Wallet is not verified for reward surveys." },
       { status: 403 }
     );
+  }
+
+  // Auto-sync on-chain verification if user is off-chain verified
+  // This ensures the smart contract's verification check will pass
+  // when the user submits the proof on-chain
+  if (verified || isAdmin) {
+    const syncResult = await syncOnChainApproval(session.walletAddress);
+    if (!syncResult.ok) {
+      console.warn(
+        "Auto on-chain verification sync failed for",
+        session.walletAddress,
+        ":",
+        syncResult.reason
+      );
+    }
   }
 
   const completionTimeSeconds = Number(body.completionTimeSeconds ?? 0);

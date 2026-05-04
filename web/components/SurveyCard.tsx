@@ -14,6 +14,8 @@ type SurveyCardProps = {
     rewardPerResponse: string;
     maxResponses: string;
     responseCount: string;
+    offChainResponseCount?: string;
+    pendingOnChainCount?: string;
     escrowRemaining: string;
     active: boolean;
     unusedRewardsWithdrawn: boolean;
@@ -77,9 +79,13 @@ export function SurveyCard({ survey, onAnswerClick }: SurveyCardProps) {
   const escrowRemainingEth = ethers.formatEther(survey.escrowRemaining);
   const maxResponsesNum = parseInt(survey.maxResponses);
   const responseCountNum = parseInt(survey.responseCount);
-  const progressPercent = maxResponsesNum > 0 ? (responseCountNum / maxResponsesNum) * 100 : 0;
+  const offChainCount = parseInt(survey.offChainResponseCount ?? "0");
+  const pendingOnChainCount = parseInt(survey.pendingOnChainCount ?? "0");
+  // Use off-chain count if available and greater than on-chain count
+  const displayResponseCount = Math.max(offChainCount, responseCountNum);
+  const progressPercent = maxResponsesNum > 0 ? (displayResponseCount / maxResponsesNum) * 100 : 0;
 
-  const isFull = responseCountNum >= maxResponsesNum;
+  const isFull = displayResponseCount >= maxResponsesNum;
   const isCreator = account?.toLowerCase() === survey.creator.toLowerCase();
   const canAnswerWithoutKyc = isAdmin || hasOnChainAdminRole;
   const isEligibleToAnswer = Boolean(isVerified) || canAnswerWithoutKyc;
@@ -126,7 +132,10 @@ export function SurveyCard({ survey, onAnswerClick }: SurveyCardProps) {
         </div>
         <div>
           <p className="text-xs text-muted font-medium mb-1">Responses</p>
-          <p className="text-sm font-semibold">{responseCountNum} / {maxResponsesNum}</p>
+          <p className="text-sm font-semibold">{displayResponseCount} / {maxResponsesNum}</p>
+          {pendingOnChainCount > 0 && responseCountNum < displayResponseCount && (
+            <p className="text-xs text-amber-600 mt-0.5">{pendingOnChainCount} pending on-chain</p>
+          )}
         </div>
         <div>
           <p className="text-xs text-muted font-medium mb-1">Escrow</p>
