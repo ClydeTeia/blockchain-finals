@@ -12,6 +12,7 @@ export function ResponseAuditPanel() {
   } = useAdmin();
   const [answers, setAnswers] = useState<Array<any>>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchAnswers = async () => {
@@ -25,7 +26,7 @@ export function ResponseAuditPanel() {
         setAnswers(data.answers || []); // Assuming the API returns { answers: [...] }
       } catch (err) {
         console.error('Failed to fetch admin answers:', err);
-        setError('Failed to load answers for audit');
+        setFetchError('Failed to load answers for audit');
       } finally {
         setIsLoading(false);
       }
@@ -35,7 +36,7 @@ export function ResponseAuditPanel() {
   }, [flagAnswer, addAuditNote]); // Re-fetch when actions are redefined (though they are stable)
 
   if (isLoading) return <p>Loading answers...</p>;
-  if (error) return <p style={{ color: 'red' }}>{error}</p>;
+  if (error || fetchError) return <p style={{ color: 'red' }}>{error ?? fetchError}</p>;
 
   return (
     <div>
@@ -79,9 +80,10 @@ export function ResponseAuditPanel() {
                     type="text"
                     placeholder="Add audit note"
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && e.target.value.trim()) {
-                        addAuditNote(answer.id, e.target.value.trim());
-                        e.target.value = '';
+                      const input = e.currentTarget;
+                      if (e.key === 'Enter' && input.value.trim()) {
+                        addAuditNote(answer.id, input.value.trim());
+                        input.value = '';
                       }
                     }}
                     style={{ marginTop: '0.25rem', padding: '0.25rem' }}

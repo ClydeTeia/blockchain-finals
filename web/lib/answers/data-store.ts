@@ -545,3 +545,46 @@ export async function getAllAnswers(): Promise<SurveyAnswerRecord[]> {
   return [...answers.values()]
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
+
+export async function updateAnswerFlag(
+  id: string,
+  flagged: boolean
+): Promise<boolean> {
+  if (hasSupabaseRestConfig()) {
+    return supabasePatch(`survey_answers?id=eq.${encodeURIComponent(id)}`, {
+      flagged
+    });
+  }
+
+  const record = answers.get(id);
+  if (!record) {
+    return false;
+  }
+  record.flagged = flagged;
+  answers.set(id, record);
+  return true;
+}
+
+export async function updateAnswerAuditNote(
+  id: string,
+  auditNote: string
+): Promise<boolean> {
+  if (hasSupabaseRestConfig()) {
+    return supabasePatch(`survey_answers?id=eq.${encodeURIComponent(id)}`, {
+      audit_notes: auditNote
+    });
+  }
+
+  const record = answers.get(id);
+  if (!record) {
+    return false;
+  }
+  record.auditNotes = auditNote;
+  answers.set(id, record);
+  return true;
+}
+
+export function resetAnswerStoresForTests(): void {
+  attempts.clear();
+  answers.clear();
+}

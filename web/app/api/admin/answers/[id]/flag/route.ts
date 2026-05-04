@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/auth/require-session";
+import { requireAdminSession } from "@/lib/auth/admin";
 import { updateAnswerFlag } from "@/lib/answers/data-store";
-import { auditLog } from "@/lib/audit/log";
+import { logAuditEvent } from "@/lib/audit/log";
 
 export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await requireSession();
+  const session = await requireAdminSession();
   if ("response" in session) {
     return session.response;
   }
 
   try {
-    const answerId = params.id;
+    const { id: answerId } = await params;
     const updated = await updateAnswerFlag(answerId, true);
     
     if (!updated) {
@@ -23,12 +23,12 @@ export async function POST(
       );
     }
 
-    await auditLog({
+    await logAuditEvent({
       actorWallet: session.walletAddress,
       action: "flag_response",
       entityType: "answer",
       entityId: answerId,
-      metadata: { flagged: true }
+      details: { flagged: true }
     });
 
     return NextResponse.json({ success: true });

@@ -3,13 +3,15 @@
 import { useEffect, useState } from 'react';
 import { formatEther } from 'ethers';
 import { useWalletAuth } from '@/hooks/useWalletAuth';
+import { useWallet } from '@/hooks/useWallet';
 import { useSurveyContract } from '@/hooks/useSurveyContract';
-import { Button } from '@/components/Button'; // Assuming we have a Button component, if not we'll create a simple one
+import Button from '@/components/Button';
 import { AnswerIntegrityVerifier } from './AnswerIntegrityVerifier';
 
 export function RewardDashboard() {
   const { isAuthenticated, walletAddress, isLoading: authLoading } = useWalletAuth();
-  const { isReady, claimableRewards, totalEarned } = useSurveyContract();
+  const { provider } = useWallet();
+  const { isReady, claimableRewards, totalEarned, claimRewards } = useSurveyContract(provider);
   const [claimable, setClaimable] = useState<string>('0');
   const [total, setTotal] = useState<string>('0');
   const [answers, setAnswers] = useState<Array<any>>([]);
@@ -55,9 +57,12 @@ export function RewardDashboard() {
     setIsClaiming(true);
     setError(null);
     try {
-      const signer = await (await useSurveyContract()).claimRewards();
-      await signer.wait();
+      const tx = await claimRewards();
+      await tx.wait();
       // Refetch claimable rewards after successful claim
+      if (!walletAddress) {
+        return;
+      }
       const claimableWei = await claimableRewards(walletAddress);
       setClaimable(formatEther(claimableWei));
     } catch (err) {
@@ -94,7 +99,7 @@ export function RewardDashboard() {
       <section>
         <h2>Your Responses</h2>
         {answers.length === 0 ? (
-          <p>You haven't submitted any responses yet.</p>
+          <p>You haven&apos;t submitted any responses yet.</p>
         ) : (
           <div>
             {answers.map((answer) => (

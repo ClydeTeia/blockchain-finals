@@ -6,8 +6,8 @@ import { getContractAddress } from "@/lib/blockchain/contract";
 import { ethers } from "ethers";
 
 export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await requireSession();
   if ("response" in session) {
@@ -15,7 +15,7 @@ export async function POST(
   }
 
   try {
-    const answerId = params.id;
+    const { id: answerId } = await params;
     const answer = await getAnswerById(answerId);
     
     if (!answer) {
