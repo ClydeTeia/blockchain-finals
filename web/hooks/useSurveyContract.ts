@@ -117,6 +117,17 @@ export function useSurveyContract(
     [readContract]
   );
 
+  const getAnswerHash = useCallback(
+    async (surveyId: bigint | number, address: string): Promise<string> => {
+      if (!readContract) throw new Error("Contract not ready.");
+      const response = (await readContract.responses(surveyId, address)) as any;
+      // ResponseRecord struct: (surveyId, respondent, answerHash, status, submittedAt, rewardAmount)
+      // The answerHash is the third element (index 2)
+      return response[2];
+    },
+    [readContract]
+  );
+
   const claimRewards = useCallback(async (): Promise<ContractTransactionResponse> => {
     const c = await writeContract();
     return c.claimRewards() as Promise<ContractTransactionResponse>;
