@@ -18,15 +18,6 @@ Sepolia-only scope:
 - Network: Sepolia Testnet
 - Currency: Sepolia ETH only (not real money)
 
-## Group Members and Roles
-Update this section before final submission.
-
-- `Ian Clyde E. Tejada` (`ClydeTeia`) - Core integration, backend fixes, survey/KYC verification fixes
-- `[Member 2 Name]` - `[Role]`
-- `[Member 3 Name]` - `[Role]`
-- `[Member 4 Name]` - `[Role]`
-- `[Member 5 Name if applicable]` - `[Role]`
-
 ## Tech Stack
 - Next.js + TypeScript App Router (`web/`)
 - Next.js Route Handlers (`web/app/api/**/route.ts`)
@@ -126,16 +117,6 @@ pnpm test
 pnpm build
 ```
 
-## Screenshot / Image
-Add at least one screenshot in `docs/assets/` and reference it here.
-
-- Example: `docs/assets/app-home.png`
-- Markdown embed after you add image:
-
-```md
-![SurveyChain Rewards Home](docs/assets/app-home.png)
-```
-
 ## Credits and References
 Add all external references used by the team.
 
@@ -145,20 +126,6 @@ Add all external references used by the team.
 - OpenZeppelin docs: https://docs.openzeppelin.com/contracts
 - Supabase docs: https://supabase.com/docs
 - AI tools used: ChatGPT/Codex (OpenAI), Claude, KiloCode Free AI Models
-
-
-## Submission Checklist (Items 1 and 2)
-- [x] Public GitHub repository link included
-- [x] README includes project description
-- [ ] README includes full member list and roles (finalized)
-- [x] Setup and installation instructions included
-- [x] Local run instructions included
-- [x] Hardhat test run instructions included
-- [x] Sepolia contract address filled
-- [x] Live frontend URL filled
-- [ ] At least one screenshot embedded
-- [x] Credits/references section included
-- [ ] Instructor access confirmed if repo is private
 
 ## Notes
 - Current repository status and phase tracking are documented in:
